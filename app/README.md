@@ -39,21 +39,42 @@ Use your computer LAN IP for physical device testing because `localhost` on a ph
 phone, not your laptop. The backend should be running with `host: 0.0.0.0`, which the server already
 does.
 
+### Backend API Contract
+
+The app talks to the backend's public API contract, not Shopify's raw Storefront model. Product and
+cart responses use backend-owned IDs:
+
+- `productId`
+- `variantId`
+- `cartId`
+- `cartLineId`
+
+Cart requests should send `variantId`, `cartLineId`, and `cartLineIds`. The backend accepts legacy
+`merchandiseId`, `id`, and `lineIds` during migration, but new app code should prefer the backend
+names above.
+
+Cart endpoints also require an `x-session-id` header. Use a stable locally persisted app/device
+session identifier so the backend can bind carts to the same mobile session that created them. If the
+session changes, existing cart reads, mutations, and checkout URL requests will be rejected.
+
+Product pagination uses `pageInfo.nextPageToken` and `pageInfo.previousPageToken`. The app should
+send those values back as `pageToken` instead of storing or interpreting Shopify cursors.
+
 ### Product Browsing Flow
 
 1. Home calls `GET /api/products?query=&first=20`.
 2. Search input is debounced before React Query refetches.
-3. Products render in a performant `FlatList` grid keyed by Shopify product IDs.
+3. Products render in a performant `FlatList` grid keyed by backend `productId` values.
 4. Loading skeletons, pull-to-refresh, empty state, and error retry are handled in the screen.
-5. Product cards expose Shopify variant IDs only as `merchandiseId` inputs for backend cart calls.
+5. Product cards pass backend `variantId` values into cart calls.
 
 ### Cart Sync Flow
 
 1. Add to cart updates Zustand optimistically.
 2. The app creates or updates the Shopify cart through `/api/cart` endpoints.
-3. Backend cart responses reconcile local state with Shopify line IDs, quantities, totals, and images.
+3. Backend cart responses reconcile local state with `cartLineId`, quantities, totals, and images.
 4. Quantity updates and removals stay optimistic where safe and roll back on sync failure.
-5. `cartId` and cart lines are persisted locally with AsyncStorage.
+5. `cartId`, cart lines, and the local session identity are persisted locally with AsyncStorage.
 
 ### Checkout Sheet Flow
 
