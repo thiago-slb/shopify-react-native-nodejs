@@ -1,5 +1,6 @@
 import { NotFoundError } from '../../../shared/errors/app-error.js';
 import type { DemoOrder, DemoOrdersResponse, DemoRebuyResponse } from '../domain/order.js';
+import { encodePublicId } from './public-id.js';
 
 const limitation =
   'Shopify Storefront API cannot fetch anonymous customer order history. This POC returns backend demo orders; production order history needs customer auth, Admin API mediation, or webhooks.';
@@ -76,7 +77,7 @@ export class DemoOrdersService {
     return {
       orderId,
       lines: order.lines.map((line) => ({
-        merchandiseId: line.merchandiseId,
+        variantId: encodePublicId('variant', line.merchandiseId),
         quantity: line.quantity
       })),
       limitation

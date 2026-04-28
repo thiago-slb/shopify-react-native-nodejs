@@ -1,4 +1,5 @@
 import type { AppConfig } from '../src/config/env.js';
+import { encodePublicId } from '../src/modules/shopify/application/public-id.js';
 import type { Cart } from '../src/modules/shopify/domain/cart.js';
 import type { Product } from '../src/modules/shopify/domain/product.js';
 
@@ -13,7 +14,7 @@ export const testConfig: AppConfig = {
 };
 
 export const productFixture: Product = {
-  id: 'gid://shopify/Product/1',
+  productId: encodePublicId('product', 'gid://shopify/Product/1'),
   title: 'Test T-Shirt',
   handle: 'test-t-shirt',
   description: 'A test product',
@@ -32,7 +33,7 @@ export const productFixture: Product = {
   },
   variants: [
     {
-      id: 'gid://shopify/ProductVariant/1',
+      variantId: encodePublicId('variant', 'gid://shopify/ProductVariant/1'),
       title: 'Small',
       availableForSale: true,
       quantityAvailable: 10,
@@ -43,18 +44,18 @@ export const productFixture: Product = {
 };
 
 export const cartFixture: Cart = {
-  id: 'gid://shopify/Cart/1',
+  cartId: encodePublicId('cart', 'gid://shopify/Cart/1'),
   checkoutUrl: 'https://example.myshopify.com/cart/c/checkout',
   totalQuantity: 1,
   lines: [
     {
-      id: 'gid://shopify/CartLine/1',
+      cartLineId: encodePublicId('cartLine', 'gid://shopify/CartLine/1'),
       quantity: 1,
       merchandise: {
-        id: 'gid://shopify/ProductVariant/1',
+        variantId: encodePublicId('variant', 'gid://shopify/ProductVariant/1'),
         title: 'Small',
         product: {
-          id: 'gid://shopify/Product/1',
+          productId: encodePublicId('product', 'gid://shopify/Product/1'),
           title: 'Test T-Shirt',
           handle: 'test-t-shirt'
         },

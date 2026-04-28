@@ -38,7 +38,10 @@ export function errorHandler(
   }
 
   if (error instanceof AppError) {
-    request.log.warn({ err: error, code: error.code }, error.message);
+    request.log.warn(
+      { err: error, code: error.code, logDetails: error.logDetails, requestId: request.id },
+      error.message
+    );
     reply.status(error.statusCode).send({
       error: {
         code: error.code,

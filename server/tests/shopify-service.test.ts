@@ -11,8 +11,8 @@ function createRepository(overrides: Partial<ShopifyRepository> = {}): ShopifyRe
       pageInfo: {
         hasNextPage: false,
         hasPreviousPage: false,
-        startCursor: null,
-        endCursor: null
+        previousPageToken: null,
+        nextPageToken: null
       }
     }),
     getProductByHandle: vi.fn().mockResolvedValue(productFixture),
@@ -32,8 +32,8 @@ describe('ShopifyService', () => {
       pageInfo: {
         hasNextPage: false,
         hasPreviousPage: false,
-        startCursor: null,
-        endCursor: null
+        previousPageToken: null,
+        nextPageToken: null
       }
     });
     const repository = createRepository({ listProducts });
@@ -43,7 +43,7 @@ describe('ShopifyService', () => {
 
     expect(listProducts).toHaveBeenCalledWith({
       first: 20,
-      after: undefined,
+      pageToken: undefined,
       query: undefined
     });
   });
@@ -61,7 +61,9 @@ describe('ShopifyService', () => {
   it('returns only the checkout URL for checkout requests', async () => {
     const service = new ShopifyService(createRepository());
 
-    await expect(service.getCheckoutUrl(cartFixture.id)).resolves.toEqual({
+    await service.createCart('session-1', []);
+
+    await expect(service.getCheckoutUrl('session-1', cartFixture.cartId)).resolves.toEqual({
       checkoutUrl: cartFixture.checkoutUrl
     });
   });

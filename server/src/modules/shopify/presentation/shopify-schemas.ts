@@ -2,26 +2,59 @@ import { z } from 'zod';
 
 export const productListQuerySchema = z.object({
   first: z.coerce.number().int().min(1).max(50).optional(),
-  after: z.string().min(1).optional(),
+  pageToken: z.string().min(1).max(2000).optional(),
+  after: z.string().min(1).max(2000).optional(),
   query: z.string().min(1).max(500).optional()
-});
+}).transform(({ after, pageToken, ...query }) => ({
+  ...query,
+  pageToken: pageToken ?? after
+}));
 
 export const handleParamsSchema = z.object({
   handle: z.string().min(1).max(255)
 });
 
 export const cartParamsSchema = z.object({
-  cartId: z.string().min(1)
+  cartId: z.string().min(1).max(2000)
 });
 
-export const cartLineInputSchema = z.object({
-  merchandiseId: z.string().min(1),
-  quantity: z.number().int().min(1)
-});
+export const cartLineInputSchema = z
+  .object({
+    variantId: z.string().min(1).max(2000).optional(),
+    merchandiseId: z.string().min(1).max(2000).optional(),
+    quantity: z.number().int().min(1)
+  })
+  .transform(({ variantId, merchandiseId, quantity }) => ({
+    variantId: variantId ?? merchandiseId ?? '',
+    quantity
+  }))
+  .pipe(
+    z.object({
+      variantId: z.string().min(1).max(2000),
+      quantity: z.number().int().min(1)
+    })
+  );
 
-export const cartLineUpdateInputSchema = cartLineInputSchema.extend({
-  id: z.string().min(1)
-});
+export const cartLineUpdateInputSchema = z
+  .object({
+    cartLineId: z.string().min(1).max(2000).optional(),
+    id: z.string().min(1).max(2000).optional(),
+    variantId: z.string().min(1).max(2000).optional(),
+    merchandiseId: z.string().min(1).max(2000).optional(),
+    quantity: z.number().int().min(1)
+  })
+  .transform(({ cartLineId, id, variantId, merchandiseId, quantity }) => ({
+    cartLineId: cartLineId ?? id ?? '',
+    variantId: variantId ?? merchandiseId ?? '',
+    quantity
+  }))
+  .pipe(
+    z.object({
+      cartLineId: z.string().min(1).max(2000),
+      variantId: z.string().min(1).max(2000),
+      quantity: z.number().int().min(1)
+    })
+  );
 
 export const cartLinesBodySchema = z.object({
   lines: z.array(cartLineInputSchema).min(1).max(100)
@@ -31,9 +64,19 @@ export const cartLinesUpdateBodySchema = z.object({
   lines: z.array(cartLineUpdateInputSchema).min(1).max(100)
 });
 
-export const cartLinesRemoveBodySchema = z.object({
-  lineIds: z.array(z.string().min(1)).min(1).max(100)
-});
+export const cartLinesRemoveBodySchema = z
+  .object({
+    cartLineIds: z.array(z.string().min(1).max(2000)).min(1).max(100).optional(),
+    lineIds: z.array(z.string().min(1).max(2000)).min(1).max(100).optional()
+  })
+  .transform(({ cartLineIds, lineIds }) => ({
+    cartLineIds: cartLineIds ?? lineIds ?? []
+  }))
+  .pipe(
+    z.object({
+      cartLineIds: z.array(z.string().min(1).max(2000)).min(1).max(100)
+    })
+  );
 
 const moneySchema = {
   type: 'object',
@@ -57,9 +100,9 @@ const imageSchema = {
 
 const productVariantSchema = {
   type: 'object',
-  required: ['id', 'title', 'availableForSale', 'quantityAvailable', 'price', 'selectedOptions'],
+  required: ['variantId', 'title', 'availableForSale', 'quantityAvailable', 'price', 'selectedOptions'],
   properties: {
-    id: { type: 'string' },
+    variantId: { type: 'string' },
     title: { type: 'string' },
     availableForSale: { type: 'boolean' },
     quantityAvailable: { type: ['number', 'null'] },
@@ -81,7 +124,7 @@ const productVariantSchema = {
 export const productResponseSchema = {
   type: 'object',
   required: [
-    'id',
+    'productId',
     'title',
     'handle',
     'description',
@@ -91,7 +134,7 @@ export const productResponseSchema = {
     'variants'
   ],
   properties: {
-    id: { type: 'string' },
+    productId: { type: 'string' },
     title: { type: 'string' },
     handle: { type: 'string' },
     description: { type: 'string' },
@@ -116,12 +159,12 @@ export const productsResponseSchema = {
     items: { type: 'array', items: productResponseSchema },
     pageInfo: {
       type: 'object',
-      required: ['hasNextPage', 'hasPreviousPage', 'startCursor', 'endCursor'],
+      required: ['hasNextPage', 'hasPreviousPage', 'previousPageToken', 'nextPageToken'],
       properties: {
         hasNextPage: { type: 'boolean' },
         hasPreviousPage: { type: 'boolean' },
-        startCursor: { type: ['string', 'null'] },
-        endCursor: { type: ['string', 'null'] }
+        previousPageToken: { type: ['string', 'null'] },
+        nextPageToken: { type: ['string', 'null'] }
       }
     }
   }
@@ -129,30 +172,30 @@ export const productsResponseSchema = {
 
 export const cartResponseSchema = {
   type: 'object',
-  required: ['id', 'checkoutUrl', 'totalQuantity', 'lines', 'cost'],
+  required: ['cartId', 'checkoutUrl', 'totalQuantity', 'lines', 'cost'],
   properties: {
-    id: { type: 'string' },
+    cartId: { type: 'string' },
     checkoutUrl: { type: 'string' },
     totalQuantity: { type: 'number' },
     lines: {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id', 'quantity', 'merchandise', 'cost'],
+        required: ['cartLineId', 'quantity', 'merchandise', 'cost'],
         properties: {
-          id: { type: 'string' },
+          cartLineId: { type: 'string' },
           quantity: { type: 'number' },
           merchandise: {
             type: 'object',
-            required: ['id', 'title', 'product', 'image', 'price'],
+            required: ['variantId', 'title', 'product', 'image', 'price'],
             properties: {
-              id: { type: 'string' },
+              variantId: { type: 'string' },
               title: { type: 'string' },
               product: {
                 type: 'object',
-                required: ['id', 'title', 'handle'],
+                required: ['productId', 'title', 'handle'],
                 properties: {
-                  id: { type: 'string' },
+                  productId: { type: 'string' },
                   title: { type: 'string' },
                   handle: { type: 'string' }
                 }
@@ -201,8 +244,10 @@ export const cartLinesBodyJsonSchema = {
       maxItems: 100,
       items: {
         type: 'object',
-        required: ['merchandiseId', 'quantity'],
+        required: ['quantity'],
+        anyOf: [{ required: ['variantId'] }, { required: ['merchandiseId'] }],
         properties: {
+          variantId: { type: 'string' },
           merchandiseId: { type: 'string' },
           quantity: { type: 'integer', minimum: 1 }
         }
@@ -221,9 +266,17 @@ export const cartLinesUpdateBodyJsonSchema = {
       maxItems: 100,
       items: {
         type: 'object',
-        required: ['id', 'merchandiseId', 'quantity'],
+        required: ['quantity'],
+        anyOf: [
+          { required: ['cartLineId'] },
+          { required: ['id'] },
+          { required: ['variantId'] },
+          { required: ['merchandiseId'] }
+        ],
         properties: {
+          cartLineId: { type: 'string' },
           id: { type: 'string' },
+          variantId: { type: 'string' },
           merchandiseId: { type: 'string' },
           quantity: { type: 'integer', minimum: 1 }
         }
@@ -234,8 +287,14 @@ export const cartLinesUpdateBodyJsonSchema = {
 
 export const cartLinesRemoveBodyJsonSchema = {
   type: 'object',
-  required: ['lineIds'],
+  anyOf: [{ required: ['cartLineIds'] }, { required: ['lineIds'] }],
   properties: {
+    cartLineIds: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 100,
+      items: { type: 'string' }
+    },
     lineIds: {
       type: 'array',
       minItems: 1,

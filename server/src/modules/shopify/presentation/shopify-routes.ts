@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { UnauthorizedError } from '../../../shared/errors/app-error.js';
 import { errorResponseSchema } from '../../../shared/schemas/openapi.js';
 import { parseRequestPart } from '../../../shared/http/validation.js';
 import type { ShopifyService } from '../application/shopify-service.js';
@@ -18,6 +19,15 @@ import {
   productsResponseSchema
 } from './shopify-schemas.js';
 
+function requireSessionId(request: { headers: Record<string, string | string[] | undefined> }): string {
+  const sessionId = request.headers['x-session-id'];
+  if (typeof sessionId !== 'string' || sessionId.trim().length === 0) {
+    throw new UnauthorizedError('x-session-id header is required for cart operations');
+  }
+
+  return sessionId.trim();
+}
+
 export function registerShopifyRoutes(fastify: FastifyInstance, service: ShopifyService): void {
   fastify.get(
     '/products',
@@ -28,6 +38,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           type: 'object',
           properties: {
             first: { type: 'integer', minimum: 1, maximum: 50 },
+            pageToken: { type: 'string' },
             after: { type: 'string' },
             query: { type: 'string' }
           }
@@ -75,14 +86,16 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         body: cartLinesBodyJsonSchema,
         response: {
           200: cartResponseSchema,
+          401: errorResponseSchema,
           400: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { lines } = parseRequestPart(cartLinesBodySchema, request.body);
-      return service.createCart(lines);
+      return service.createCart(sessionId, lines);
     }
   );
 
@@ -98,14 +111,17 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         },
         response: {
           200: cartResponseSchema,
+          401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { cartId } = parseRequestPart(cartParamsSchema, request.params);
-      return service.getCart(cartId);
+      return service.getCart(sessionId, cartId);
     }
   );
 
@@ -123,15 +139,18 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         response: {
           200: cartResponseSchema,
           400: errorResponseSchema,
+          401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { cartId } = parseRequestPart(cartParamsSchema, request.params);
       const { lines } = parseRequestPart(cartLinesBodySchema, request.body);
-      return service.addCartLines(cartId, lines);
+      return service.addCartLines(sessionId, cartId, lines);
     }
   );
 
@@ -149,15 +168,18 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         response: {
           200: cartResponseSchema,
           400: errorResponseSchema,
+          401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { cartId } = parseRequestPart(cartParamsSchema, request.params);
       const { lines } = parseRequestPart(cartLinesUpdateBodySchema, request.body);
-      return service.updateCartLines(cartId, lines);
+      return service.updateCartLines(sessionId, cartId, lines);
     }
   );
 
@@ -175,15 +197,18 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         response: {
           200: cartResponseSchema,
           400: errorResponseSchema,
+          401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { cartId } = parseRequestPart(cartParamsSchema, request.params);
-      const { lineIds } = parseRequestPart(cartLinesRemoveBodySchema, request.body);
-      return service.removeCartLines(cartId, lineIds);
+      const { cartLineIds } = parseRequestPart(cartLinesRemoveBodySchema, request.body);
+      return service.removeCartLines(sessionId, cartId, cartLineIds);
     }
   );
 
@@ -199,14 +224,17 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         },
         response: {
           200: checkoutUrlResponseSchema,
+          401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
           502: errorResponseSchema
         }
       }
     },
     async (request) => {
+      const sessionId = requireSessionId(request);
       const { cartId } = parseRequestPart(cartParamsSchema, request.params);
-      return service.getCheckoutUrl(cartId);
+      return service.getCheckoutUrl(sessionId, cartId);
     }
   );
 }

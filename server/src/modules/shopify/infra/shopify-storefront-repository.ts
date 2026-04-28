@@ -1,9 +1,10 @@
 import { BadRequestError, UpstreamError } from '../../../shared/errors/app-error.js';
 import type { ShopifyRepository } from '../application/shopify-repository.js';
+import { decodePageToken, encodePageToken } from '../application/pagination-token.js';
+import { decodePublicId, encodePublicId } from '../application/public-id.js';
 import type { Cart, CartLineInput, CartLineUpdateInput } from '../domain/cart.js';
 import type {
   Money,
-  PageInfo,
   Product,
   ProductConnection,
   ProductImage,
@@ -62,7 +63,12 @@ type ShopifyProduct = {
   variants: Connection<ShopifyVariant>;
 };
 
-type ShopifyPageInfo = PageInfo;
+type ShopifyPageInfo = {
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  startCursor: string | null;
+  endCursor: string | null;
+};
 
 type ShopifyCartLine = {
   id: string;
@@ -117,7 +123,7 @@ function normalizeImage(image: ShopifyImage): ProductImage {
 
 function normalizeVariant(variant: ShopifyVariant): ProductVariant {
   return {
-    id: variant.id,
+    variantId: encodePublicId('variant', variant.id),
     title: variant.title,
     availableForSale: variant.availableForSale,
     quantityAvailable: variant.quantityAvailable,
@@ -128,7 +134,7 @@ function normalizeVariant(variant: ShopifyVariant): ProductVariant {
 
 function normalizeProduct(product: ShopifyProduct): Product {
   return {
-    id: product.id,
+    productId: encodePublicId('product', product.id),
     title: product.title,
     handle: product.handle,
     description: product.description,
@@ -141,18 +147,22 @@ function normalizeProduct(product: ShopifyProduct): Product {
 
 function normalizeCart(cart: ShopifyCart): Cart {
   return {
-    id: cart.id,
+    cartId: encodePublicId('cart', cart.id),
     checkoutUrl: cart.checkoutUrl,
     totalQuantity: cart.totalQuantity,
     cost: cart.cost,
     lines: nodes(cart.lines).map((line) => ({
-      id: line.id,
+      cartLineId: encodePublicId('cartLine', line.id),
       quantity: line.quantity,
       cost: line.cost,
       merchandise: {
-        id: line.merchandise.id,
+        variantId: encodePublicId('variant', line.merchandise.id),
         title: line.merchandise.title,
-        product: line.merchandise.product,
+        product: {
+          productId: encodePublicId('product', line.merchandise.product.id),
+          title: line.merchandise.product.title,
+          handle: line.merchandise.product.handle
+        },
         image: line.merchandise.image ? normalizeImage(line.merchandise.image) : null,
         price: line.merchandise.price
       }
@@ -162,13 +172,13 @@ function normalizeCart(cart: ShopifyCart): Cart {
 
 function requireMutationCart(payload: MutationPayload): Cart {
   if (payload.userErrors.length > 0) {
-    throw new BadRequestError('Shopify rejected the cart operation', {
-      userErrors: payload.userErrors.map((error) => ({
-        field: error.field,
-        message: error.message,
-        code: error.code
-      }))
-    });
+    const errors = payload.userErrors.map(normalizeUserError);
+    throw new BadRequestError(
+      errors[0]?.message ?? 'Cart operation rejected',
+      { errors },
+      errors[0]?.code,
+      { shopifyUserErrors: payload.userErrors }
+    );
   }
 
   if (!payload.cart) {
@@ -178,26 +188,92 @@ function requireMutationCart(payload: MutationPayload): Cart {
   return normalizeCart(payload.cart);
 }
 
+function normalizeUserError(error: ShopifyUserError): { code: string; message: string } {
+  const field = error.field?.join('.') ?? '';
+  const message = error.message.toLowerCase();
+
+  if (field.includes('quantity') || message.includes('quantity') || message.includes('available')) {
+    return {
+      code: 'QUANTITY_UNAVAILABLE',
+      message: 'Requested quantity is not available.'
+    };
+  }
+
+  if (field.includes('merchandise') || message.includes('variant')) {
+    return {
+      code: 'INVALID_VARIANT',
+      message: 'Selected variant is not available.'
+    };
+  }
+
+  if (message.includes('cart') && (message.includes('expired') || message.includes('invalid'))) {
+    return {
+      code: 'CART_EXPIRED',
+      message: 'Cart is no longer available.'
+    };
+  }
+
+  if (field.includes('lines') || message.includes('line')) {
+    return {
+      code: 'CART_LINE_UNAVAILABLE',
+      message: 'Cart line is no longer available.'
+    };
+  }
+
+  return {
+    code: 'CART_OPERATION_REJECTED',
+    message: 'Cart operation could not be completed.'
+  };
+}
+
+function toShopifyLineInput(line: CartLineInput): { merchandiseId: string; quantity: number } {
+  return {
+    merchandiseId: decodePublicId('variant', line.variantId),
+    quantity: line.quantity
+  };
+}
+
+function toShopifyLineUpdateInput(line: CartLineUpdateInput): {
+  id: string;
+  merchandiseId: string;
+  quantity: number;
+} {
+  return {
+    id: decodePublicId('cartLine', line.cartLineId),
+    merchandiseId: decodePublicId('variant', line.variantId),
+    quantity: line.quantity
+  };
+}
+
 export class ShopifyStorefrontRepository implements ShopifyRepository {
   constructor(private readonly client: ShopifyStorefrontClient) {}
 
   async listProducts(params: ProductListParams): Promise<ProductConnection> {
+    const pageToken = decodePageToken(params.pageToken);
+    const pageSize = params.first ?? 20;
     const data = await this.client.request<
       {
         products: Connection<ShopifyProduct> & {
           pageInfo: ShopifyPageInfo;
         };
       },
-      { first: number; after?: string; query?: string }
+      { first?: number; last?: number; after?: string; before?: string; query?: string }
     >(productsQuery, {
-      first: params.first ?? 20,
-      after: params.after,
+      first: pageToken?.direction === 'previous' ? undefined : pageSize,
+      last: pageToken?.direction === 'previous' ? pageSize : undefined,
+      after: pageToken?.direction === 'next' ? pageToken.cursor : undefined,
+      before: pageToken?.direction === 'previous' ? pageToken.cursor : undefined,
       query: params.query
     });
 
     return {
       items: nodes(data.products).map(normalizeProduct),
-      pageInfo: data.products.pageInfo
+      pageInfo: {
+        hasNextPage: data.products.pageInfo.hasNextPage,
+        hasPreviousPage: data.products.pageInfo.hasPreviousPage,
+        previousPageToken: encodePageToken(data.products.pageInfo.startCursor, 'previous'),
+        nextPageToken: encodePageToken(data.products.pageInfo.endCursor, 'next')
+      }
     };
   }
 
@@ -215,8 +291,8 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   async createCart(lines: CartLineInput[]): Promise<Cart> {
     const data = await this.client.request<
       { cartCreate: MutationPayload },
-      { input: { lines: CartLineInput[] } }
-    >(cartCreateMutation, { input: { lines } });
+      { input: { lines: Array<{ merchandiseId: string; quantity: number }> } }
+    >(cartCreateMutation, { input: { lines: lines.map(toShopifyLineInput) } });
 
     return requireMutationCart(data.cartCreate);
   }
@@ -224,7 +300,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   async getCart(cartId: string): Promise<Cart | null> {
     const data = await this.client.request<{ cart: ShopifyCart | null }, { cartId: string }>(
       cartQuery,
-      { cartId }
+      { cartId: decodePublicId('cart', cartId) }
     );
 
     return data.cart ? normalizeCart(data.cart) : null;
@@ -233,8 +309,8 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   async addCartLines(cartId: string, lines: CartLineInput[]): Promise<Cart> {
     const data = await this.client.request<
       { cartLinesAdd: MutationPayload },
-      { cartId: string; lines: CartLineInput[] }
-    >(cartLinesAddMutation, { cartId, lines });
+      { cartId: string; lines: Array<{ merchandiseId: string; quantity: number }> }
+    >(cartLinesAddMutation, { cartId: decodePublicId('cart', cartId), lines: lines.map(toShopifyLineInput) });
 
     return requireMutationCart(data.cartLinesAdd);
   }
@@ -242,8 +318,11 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   async updateCartLines(cartId: string, lines: CartLineUpdateInput[]): Promise<Cart> {
     const data = await this.client.request<
       { cartLinesUpdate: MutationPayload },
-      { cartId: string; lines: CartLineUpdateInput[] }
-    >(cartLinesUpdateMutation, { cartId, lines });
+      { cartId: string; lines: Array<{ id: string; merchandiseId: string; quantity: number }> }
+    >(cartLinesUpdateMutation, {
+      cartId: decodePublicId('cart', cartId),
+      lines: lines.map(toShopifyLineUpdateInput)
+    });
 
     return requireMutationCart(data.cartLinesUpdate);
   }
@@ -252,7 +331,10 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
     const data = await this.client.request<
       { cartLinesRemove: MutationPayload },
       { cartId: string; lineIds: string[] }
-    >(cartLinesRemoveMutation, { cartId, lineIds });
+    >(cartLinesRemoveMutation, {
+      cartId: decodePublicId('cart', cartId),
+      lineIds: lineIds.map((lineId) => decodePublicId('cartLine', lineId))
+    });
 
     return requireMutationCart(data.cartLinesRemove);
   }

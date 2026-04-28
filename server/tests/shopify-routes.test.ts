@@ -12,8 +12,8 @@ const repository: ShopifyRepository = {
       pageInfo: {
         hasNextPage: false,
         hasPreviousPage: false,
-        startCursor: null,
-        endCursor: null
+        previousPageToken: null,
+        nextPageToken: null
       }
     }),
   getProductByHandle: () => Promise.resolve(productFixture),
@@ -47,7 +47,7 @@ describe('Shopify routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      items: [{ handle: 'test-t-shirt', variants: [{ id: 'gid://shopify/ProductVariant/1' }] }]
+      items: [{ handle: 'test-t-shirt', variants: [{ variantId: productFixture.variants[0].variantId }] }]
     });
   });
 
@@ -57,6 +57,7 @@ describe('Shopify routes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/cart',
+      headers: { 'x-session-id': 'session-1' },
       payload: { lines: [{ merchandiseId: '', quantity: 0 }] }
     });
 
@@ -66,15 +67,60 @@ describe('Shopify routes', () => {
     });
   });
 
-  it('returns checkout URL for a cart', async () => {
+  it('requires a session for cart operations', async () => {
     app = await buildApp({ config: testConfig, shopifyService: new ShopifyService(repository) });
 
     const response = await app.inject({
       method: 'POST',
-      url: `/api/cart/${encodeURIComponent(cartFixture.id)}/checkout`
+      url: '/api/cart',
+      payload: { lines: [{ variantId: productFixture.variants[0].variantId, quantity: 1 }] }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: { code: 'AUTHENTICATION_REQUIRED' }
+    });
+  });
+
+  it('returns checkout URL for a cart', async () => {
+    app = await buildApp({ config: testConfig, shopifyService: new ShopifyService(repository) });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/cart',
+      headers: { 'x-session-id': 'session-1' },
+      payload: { lines: [{ variantId: productFixture.variants[0].variantId, quantity: 1 }] }
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/cart/${encodeURIComponent(cartFixture.cartId)}/checkout`,
+      headers: { 'x-session-id': 'session-1' }
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ checkoutUrl: cartFixture.checkoutUrl });
+  });
+
+  it('rejects cart access from another session', async () => {
+    app = await buildApp({ config: testConfig, shopifyService: new ShopifyService(repository) });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/cart',
+      headers: { 'x-session-id': 'session-1' },
+      payload: { lines: [{ variantId: productFixture.variants[0].variantId, quantity: 1 }] }
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/cart/${encodeURIComponent(cartFixture.cartId)}`,
+      headers: { 'x-session-id': 'session-2' }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: 'CART_OWNERSHIP_MISMATCH' }
+    });
   });
 });

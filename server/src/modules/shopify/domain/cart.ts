@@ -1,22 +1,22 @@
 import type { Money, ProductImage } from './product.js';
 
 export type CartLineInput = {
-  merchandiseId: string;
+  variantId: string;
   quantity: number;
 };
 
 export type CartLineUpdateInput = CartLineInput & {
-  id: string;
+  cartLineId: string;
 };
 
 export type CartLine = {
-  id: string;
+  cartLineId: string;
   quantity: number;
   merchandise: {
-    id: string;
+    variantId: string;
     title: string;
     product: {
-      id: string;
+      productId: string;
       title: string;
       handle: string;
     };
@@ -29,7 +29,7 @@ export type CartLine = {
 };
 
 export type Cart = {
-  id: string;
+  cartId: string;
   checkoutUrl: string;
   totalQuantity: number;
   lines: CartLine[];

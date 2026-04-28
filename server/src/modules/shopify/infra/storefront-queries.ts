@@ -105,8 +105,8 @@ const cartFields = `
 `;
 
 export const productsQuery = `
-  query Products($first: Int!, $after: String, $query: String) {
-    products(first: $first, after: $after, query: $query) {
+  query Products($first: Int, $last: Int, $after: String, $before: String, $query: String) {
+    products(first: $first, last: $last, after: $after, before: $before, query: $query) {
       pageInfo {
         hasNextPage
         hasPreviousPage

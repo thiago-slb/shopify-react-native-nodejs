@@ -11,7 +11,7 @@ export type ProductImage = {
 };
 
 export type ProductVariant = {
-  id: string;
+  variantId: string;
   title: string;
   availableForSale: boolean;
   quantityAvailable: number | null;
@@ -23,7 +23,7 @@ export type ProductVariant = {
 };
 
 export type Product = {
-  id: string;
+  productId: string;
   title: string;
   handle: string;
   description: string;
@@ -39,8 +39,8 @@ export type Product = {
 export type PageInfo = {
   hasNextPage: boolean;
   hasPreviousPage: boolean;
-  startCursor: string | null;
-  endCursor: string | null;
+  previousPageToken: string | null;
+  nextPageToken: string | null;
 };
 
 export type ProductConnection = {
@@ -50,6 +50,6 @@ export type ProductConnection = {
 
 export type ProductListParams = {
   first?: number;
-  after?: string;
+  pageToken?: string;
   query?: string;
 };

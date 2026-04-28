@@ -6,7 +6,7 @@
   "tasks": [
     {
       "id": "server-api-001",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "api-contract",
       "title": "Stop exposing Shopify GIDs as the primary public API model",
@@ -26,7 +26,7 @@
     },
     {
       "id": "server-api-002",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "api-contract",
       "title": "Normalize Shopify userErrors into stable domain error codes",
@@ -44,7 +44,7 @@
     },
     {
       "id": "server-api-003",
-      "status": "todo",
+      "status": "completed",
       "priority": "high",
       "category": "api-contract",
       "title": "Separate Storefront pagination cursors from public pagination tokens",
@@ -62,7 +62,7 @@
     },
     {
       "id": "server-security-001",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "security",
       "title": "Add authentication and cart ownership model",

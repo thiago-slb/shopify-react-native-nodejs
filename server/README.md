@@ -108,9 +108,24 @@ Implemented Storefront operations:
 - `cartLinesUpdate`
 - `cartLinesRemove`
 
-Shopify GraphQL edges and nodes are normalized into app-friendly DTOs. Product responses include
-variant IDs so the mobile app can pass a `merchandiseId` when creating or changing cart lines.
-Shopify `userErrors` are returned as backend `400` errors with a stable error envelope.
+Shopify GraphQL edges and nodes are normalized into app-friendly DTOs. Public responses expose
+backend-owned IDs such as `productId`, `variantId`, `cartId`, and `cartLineId`; raw
+`gid://shopify/...` values stay behind the backend boundary. Product lists expose opaque
+`pageInfo.nextPageToken` and `pageInfo.previousPageToken` values rather than Storefront cursors.
+Pagination tokens are versioned backend tokens; they do not have a fixed server-side expiry today,
+but clients should treat them as short-lived and compatible only with the current catalog query.
+For compatibility during migration, the backend still accepts legacy Shopify GIDs and legacy
+request fields such as `merchandiseId`, `id`, and `lineIds`, but new clients should use
+`variantId`, `cartLineId`, and `cartLineIds`.
+
+Cart endpoints require an `x-session-id` header. Carts are bound to the session that created them,
+and reads, mutations, and checkout URL requests from another session are rejected. This is a
+lightweight mobile session strategy for the current backend; production deployments should replace
+or back it with durable user/device identity storage.
+
+Shopify `userErrors` are mapped to backend-owned error codes such as `QUANTITY_UNAVAILABLE`,
+`INVALID_VARIANT`, `CART_EXPIRED`, and `CART_LINE_UNAVAILABLE`. Raw Shopify error metadata is
+logged internally with the Fastify request ID and is not returned to clients.
 
 ### Example API Calls
 
@@ -130,11 +145,12 @@ Create a cart:
 
 ```bash
 curl -X POST "http://localhost:3000/api/cart" \
+  -H "x-session-id: local-device-session" \
   -H "Content-Type: application/json" \
   -d '{
     "lines": [
       {
-        "merchandiseId": "gid://shopify/ProductVariant/123",
+        "variantId": "var_Z2lkOi8vc2hvcGlmeS9Qcm9kdWN0VmFyaWFudC8xMjM",
         "quantity": 1
       }
     ]
@@ -144,18 +160,20 @@ curl -X POST "http://localhost:3000/api/cart" \
 Fetch a cart:
 
 ```bash
-curl "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123"
+curl "http://localhost:3000/api/cart/cart_Z2lkOi8vc2hvcGlmeS9DYXJ0LzEyMw" \
+  -H "x-session-id: local-device-session"
 ```
 
 Add cart lines:
 
 ```bash
-curl -X POST "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/lines" \
+curl -X POST "http://localhost:3000/api/cart/cart_Z2lkOi8vc2hvcGlmeS9DYXJ0LzEyMw/lines" \
+  -H "x-session-id: local-device-session" \
   -H "Content-Type: application/json" \
   -d '{
     "lines": [
       {
-        "merchandiseId": "gid://shopify/ProductVariant/456",
+        "variantId": "var_Z2lkOi8vc2hvcGlmeS9Qcm9kdWN0VmFyaWFudC80NTY",
         "quantity": 1
       }
     ]
@@ -165,13 +183,14 @@ curl -X POST "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/li
 Update cart lines:
 
 ```bash
-curl -X PATCH "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/lines" \
+curl -X PATCH "http://localhost:3000/api/cart/cart_Z2lkOi8vc2hvcGlmeS9DYXJ0LzEyMw/lines" \
+  -H "x-session-id: local-device-session" \
   -H "Content-Type: application/json" \
   -d '{
     "lines": [
       {
-        "id": "gid://shopify/CartLine/789",
-        "merchandiseId": "gid://shopify/ProductVariant/456",
+        "cartLineId": "cline_Z2lkOi8vc2hvcGlmeS9DYXJ0TGluZS83ODk",
+        "variantId": "var_Z2lkOi8vc2hvcGlmeS9Qcm9kdWN0VmFyaWFudC80NTY",
         "quantity": 2
       }
     ]
@@ -181,17 +200,19 @@ curl -X PATCH "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/l
 Remove cart lines:
 
 ```bash
-curl -X DELETE "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/lines" \
+curl -X DELETE "http://localhost:3000/api/cart/cart_Z2lkOi8vc2hvcGlmeS9DYXJ0LzEyMw/lines" \
+  -H "x-session-id: local-device-session" \
   -H "Content-Type: application/json" \
   -d '{
-    "lineIds": ["gid://shopify/CartLine/789"]
+    "cartLineIds": ["cline_Z2lkOi8vc2hvcGlmeS9DYXJ0TGluZS83ODk"]
   }'
 ```
 
 Get checkout URL:
 
 ```bash
-curl -X POST "http://localhost:3000/api/cart/gid%3A%2F%2Fshopify%2FCart%2F123/checkout"
+curl -X POST "http://localhost:3000/api/cart/cart_Z2lkOi8vc2hvcGlmeS9DYXJ0LzEyMw/checkout" \
+  -H "x-session-id: local-device-session"
 ```
 
 Response:
