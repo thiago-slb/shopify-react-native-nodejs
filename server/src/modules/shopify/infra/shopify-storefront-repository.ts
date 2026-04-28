@@ -264,7 +264,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
       after: pageToken?.direction === 'next' ? pageToken.cursor : undefined,
       before: pageToken?.direction === 'previous' ? pageToken.cursor : undefined,
       query: params.query
-    });
+    }, { retriable: true });
 
     return {
       items: nodes(data.products).map(normalizeProduct),
@@ -283,7 +283,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
         productByHandle: ShopifyProduct | null;
       },
       { handle: string }
-    >(productByHandleQuery, { handle });
+    >(productByHandleQuery, { handle }, { retriable: true });
 
     return data.productByHandle ? normalizeProduct(data.productByHandle) : null;
   }
@@ -300,7 +300,8 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   async getCart(cartId: string): Promise<Cart | null> {
     const data = await this.client.request<{ cart: ShopifyCart | null }, { cartId: string }>(
       cartQuery,
-      { cartId: decodePublicId('cart', cartId) }
+      { cartId: decodePublicId('cart', cartId) },
+      { retriable: true }
     );
 
     return data.cart ? normalizeCart(data.cart) : null;

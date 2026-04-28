@@ -26,6 +26,16 @@ export function errorHandler(
     return;
   }
 
+  if ('code' in error && error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+    reply.status(413).send({
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Request body is too large'
+      }
+    } satisfies ErrorPayload);
+    return;
+  }
+
   if (error instanceof ZodError) {
     reply.status(400).send({
       error: {

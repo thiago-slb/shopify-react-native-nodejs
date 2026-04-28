@@ -48,14 +48,33 @@ NODE_ENV=development
 PORT=3000
 LOG_LEVEL=info
 CORS_ORIGIN=*
+API_DOCS_ENABLED=true
+BODY_LIMIT_BYTES=1048576
+RATE_LIMIT_REDIS_URL=
 
 SHOPIFY_STORE_DOMAIN=your-shop.myshopify.com
 SHOPIFY_STOREFRONT_ACCESS_TOKEN=your_storefront_access_token
 SHOPIFY_STOREFRONT_API_VERSION=2025-01
+SHOPIFY_STOREFRONT_TIMEOUT_MS=5000
+SHOPIFY_STOREFRONT_READ_RETRIES=2
 ```
 
 `SHOPIFY_STORE_DOMAIN` should be the store domain without `https://`. The token must be a
 Storefront API access token, not an Admin API token.
+
+Production startup rejects `CORS_ORIGIN=*`. Use a comma-separated allowlist such as
+`https://shop.example,https://admin.example`. Swagger UI is disabled by default in production; set
+`API_DOCS_ENABLED=true` only when docs are intentionally exposed or protected upstream.
+
+Rate limiting uses route-specific budgets for catalog reads, cart mutations, and checkout URL
+creation. Local development and single-instance deployments use the plugin's in-memory store. Set
+`RATE_LIMIT_REDIS_URL` in multi-instance production so limits are shared across instances. Limited
+requests return a stable `RATE_LIMITED` error envelope and `Retry-After` headers, and are logged with
+the `rate_limit.limited_request` metric key.
+
+Shopify Storefront requests are aborted after `SHOPIFY_STOREFRONT_TIMEOUT_MS`. Product and cart read
+queries are retried with bounded exponential backoff up to `SHOPIFY_STOREFRONT_READ_RETRIES`; cart
+mutations are not retried automatically.
 
 ### Run Locally
 
@@ -81,7 +100,7 @@ npm run format
 
 ### API Documentation
 
-When the server is running, Swagger UI is available at:
+When enabled, Swagger UI is available at:
 
 ```text
 http://localhost:3000/docs

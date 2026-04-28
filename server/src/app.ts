@@ -1,7 +1,9 @@
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { Redis } from 'ioredis';
 import type { AppConfig } from './config/env.js';
 import { loadConfig } from './config/env.js';
 import { DemoOrdersService } from './modules/shopify/application/demo-orders-service.js';
@@ -9,6 +11,7 @@ import { ShopifyService } from './modules/shopify/application/shopify-service.js
 import { ShopifyStorefrontRepository } from './modules/shopify/infra/shopify-storefront-repository.js';
 import { ShopifyStorefrontClient } from './modules/shopify/infra/storefront-client.js';
 import { registerShopifyRoutes } from './modules/shopify/presentation/shopify-routes.js';
+import { RateLimitedError } from './shared/errors/app-error.js';
 import { errorHandler } from './shared/http/error-handler.js';
 import { notFoundHandler } from './shared/http/validation.js';
 import { loggerOptions } from './shared/logger/logger.js';
@@ -35,10 +38,23 @@ function corsOrigin(origin: string): string | string[] | boolean {
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const config = options.config ?? loadConfig();
+  const redis = config.RATE_LIMIT_REDIS_URL ? new Redis(config.RATE_LIMIT_REDIS_URL) : undefined;
   const fastify = Fastify({
     logger: loggerOptions(config),
-    trustProxy: true
+    trustProxy: true,
+    bodyLimit: config.BODY_LIMIT_BYTES,
+    ajv: {
+      customOptions: {
+        removeAdditional: false
+      }
+    }
   });
+
+  if (redis) {
+    fastify.addHook('onClose', () => {
+      redis.disconnect();
+    });
+  }
 
   const shopifyService =
     options.shopifyService ??
@@ -53,6 +69,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     credentials: config.CORS_ORIGIN !== '*'
   });
 
+  await fastify.register(rateLimit, {
+    global: false,
+    ...(redis ? { redis } : {}),
+    keyGenerator: (request) => {
+      const sessionId = request.headers['x-session-id'];
+      return typeof sessionId === 'string' && sessionId.trim() ? sessionId : request.ip;
+    },
+    errorResponseBuilder: (_request, context) =>
+      new RateLimitedError('Rate limit exceeded', {
+        limit: context.max,
+        retryAfter: context.after
+      }),
+    onExceeded: (request, key) => {
+      request.log.warn(
+        { metric: 'rate_limit.limited_request', key, route: request.routeOptions.url },
+        'Request rate limited'
+      );
+    }
+  });
+
   await fastify.register(swagger, {
     openapi: {
       info: {
@@ -63,13 +99,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     }
   });
 
-  await fastify.register(swaggerUi, {
-    routePrefix: '/docs',
-    uiConfig: {
-      docExpansion: 'list',
-      deepLinking: true
-    }
-  });
+  if (config.API_DOCS_ENABLED) {
+    await fastify.register(swaggerUi, {
+      routePrefix: '/docs',
+      uiConfig: {
+        docExpansion: 'list',
+        deepLinking: true
+      }
+    });
+  }
 
   fastify.get(
     '/health',

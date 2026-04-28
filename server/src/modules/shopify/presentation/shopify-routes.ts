@@ -19,6 +19,11 @@ import {
   productsResponseSchema
 } from './shopify-schemas.js';
 
+const catalogRateLimit = { max: 60, timeWindow: '1 minute', groupId: 'catalog' };
+const cartReadRateLimit = { max: 60, timeWindow: '1 minute', groupId: 'cart-read' };
+const cartMutationRateLimit = { max: 20, timeWindow: '1 minute', groupId: 'cart-mutation' };
+const checkoutRateLimit = { max: 10, timeWindow: '1 minute', groupId: 'checkout' };
+
 function requireSessionId(request: { headers: Record<string, string | string[] | undefined> }): string {
   const sessionId = request.headers['x-session-id'];
   if (typeof sessionId !== 'string' || sessionId.trim().length === 0) {
@@ -36,18 +41,23 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         tags: ['Products'],
         querystring: {
           type: 'object',
+          additionalProperties: false,
           properties: {
             first: { type: 'integer', minimum: 1, maximum: 50 },
-            pageToken: { type: 'string' },
-            after: { type: 'string' },
-            query: { type: 'string' }
+            pageToken: { type: 'string', maxLength: 2000 },
+            after: { type: 'string', maxLength: 2000 },
+            query: { type: 'string', maxLength: 500 }
           }
         },
         response: {
           200: productsResponseSchema,
           400: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: catalogRateLimit
       }
     },
     async (request) => service.listProducts(parseRequestPart(productListQuerySchema, request.query))
@@ -61,15 +71,20 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['handle'],
+          additionalProperties: false,
           properties: {
-            handle: { type: 'string' }
+            handle: { type: 'string', maxLength: 255 }
           }
         },
         response: {
           200: productResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: catalogRateLimit
       }
     },
     async (request) => {
@@ -86,10 +101,14 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         body: cartLinesBodyJsonSchema,
         response: {
           200: cartResponseSchema,
-          401: errorResponseSchema,
           400: errorResponseSchema,
+          401: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: cartMutationRateLimit
       }
     },
     async (request) => {
@@ -107,15 +126,20 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['cartId'],
-          properties: { cartId: { type: 'string' } }
+          additionalProperties: false,
+          properties: { cartId: { type: 'string', maxLength: 2000 } }
         },
         response: {
           200: cartResponseSchema,
           401: errorResponseSchema,
           403: errorResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: cartReadRateLimit
       }
     },
     async (request) => {
@@ -133,7 +157,8 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['cartId'],
-          properties: { cartId: { type: 'string' } }
+          additionalProperties: false,
+          properties: { cartId: { type: 'string', maxLength: 2000 } }
         },
         body: cartLinesBodyJsonSchema,
         response: {
@@ -142,8 +167,12 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           401: errorResponseSchema,
           403: errorResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: cartMutationRateLimit
       }
     },
     async (request) => {
@@ -162,7 +191,8 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['cartId'],
-          properties: { cartId: { type: 'string' } }
+          additionalProperties: false,
+          properties: { cartId: { type: 'string', maxLength: 2000 } }
         },
         body: cartLinesUpdateBodyJsonSchema,
         response: {
@@ -171,8 +201,12 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           401: errorResponseSchema,
           403: errorResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: cartMutationRateLimit
       }
     },
     async (request) => {
@@ -191,7 +225,8 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['cartId'],
-          properties: { cartId: { type: 'string' } }
+          additionalProperties: false,
+          properties: { cartId: { type: 'string', maxLength: 2000 } }
         },
         body: cartLinesRemoveBodyJsonSchema,
         response: {
@@ -200,8 +235,12 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           401: errorResponseSchema,
           403: errorResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: cartMutationRateLimit
       }
     },
     async (request) => {
@@ -220,15 +259,20 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
         params: {
           type: 'object',
           required: ['cartId'],
-          properties: { cartId: { type: 'string' } }
+          additionalProperties: false,
+          properties: { cartId: { type: 'string', maxLength: 2000 } }
         },
         response: {
           200: checkoutUrlResponseSchema,
           401: errorResponseSchema,
           403: errorResponseSchema,
           404: errorResponseSchema,
+          429: errorResponseSchema,
           502: errorResponseSchema
         }
+      },
+      config: {
+        rateLimit: checkoutRateLimit
       }
     },
     async (request) => {

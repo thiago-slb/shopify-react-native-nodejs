@@ -80,7 +80,7 @@
     },
     {
       "id": "server-security-002",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "security",
       "title": "Add API rate limiting and abuse protection",
@@ -99,7 +99,7 @@
     },
     {
       "id": "server-security-003",
-      "status": "todo",
+      "status": "completed",
       "priority": "high",
       "category": "security",
       "title": "Lock down CORS and production docs exposure",
@@ -118,7 +118,7 @@
     },
     {
       "id": "server-security-004",
-      "status": "todo",
+      "status": "completed",
       "priority": "high",
       "category": "security",
       "title": "Harden request validation for Shopify identifiers and body sizes",
@@ -138,7 +138,7 @@
     },
     {
       "id": "server-resilience-001",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "resilience",
       "title": "Add upstream timeouts, aborts, and retry policy for Shopify calls",

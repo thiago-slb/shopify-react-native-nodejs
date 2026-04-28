@@ -38,6 +38,12 @@ export class UpstreamError extends AppError {
   }
 }
 
+export class UpstreamTimeoutError extends AppError {
+  constructor(message = 'Upstream service timed out', details?: unknown) {
+    super(message, 504, 'UPSTREAM_TIMEOUT', details);
+  }
+}
+
 export class UnauthorizedError extends AppError {
   constructor(message = 'Authentication required', details?: unknown) {
     super(message, 401, 'AUTHENTICATION_REQUIRED', details);
@@ -47,5 +53,11 @@ export class UnauthorizedError extends AppError {
 export class ForbiddenError extends AppError {
   constructor(message = 'Forbidden', details?: unknown) {
     super(message, 403, 'CART_OWNERSHIP_MISMATCH', details);
+  }
+}
+
+export class RateLimitedError extends AppError {
+  constructor(message = 'Too many requests', details?: unknown) {
+    super(message, 429, 'RATE_LIMITED', details);
   }
 }

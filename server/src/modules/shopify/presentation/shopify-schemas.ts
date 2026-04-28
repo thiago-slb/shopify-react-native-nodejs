@@ -1,48 +1,68 @@
 import { z } from 'zod';
 
-export const productListQuerySchema = z.object({
-  first: z.coerce.number().int().min(1).max(50).optional(),
-  pageToken: z.string().min(1).max(2000).optional(),
-  after: z.string().min(1).max(2000).optional(),
-  query: z.string().min(1).max(500).optional()
-}).transform(({ after, pageToken, ...query }) => ({
-  ...query,
-  pageToken: pageToken ?? after
-}));
+const idMaxLength = 2000;
+const tokenPattern = '^[A-Za-z0-9_-]+$';
+
+function publicIdSchema(prefix: string, shopifyType: string): z.ZodString {
+  return z
+    .string()
+    .min(1)
+    .max(idMaxLength)
+    .regex(new RegExp(`^(${prefix}_[A-Za-z0-9_-]+|gid://shopify/${shopifyType}/.+)$`), 'Invalid identifier');
+}
+
+const cartIdSchema = publicIdSchema('cart', 'Cart');
+const cartLineIdSchema = publicIdSchema('cline', 'CartLine');
+const variantIdSchema = publicIdSchema('var', 'ProductVariant');
+
+export const productListQuerySchema = z
+  .object({
+    first: z.coerce.number().int().min(1).max(50).optional(),
+    pageToken: z.string().min(1).max(idMaxLength).regex(new RegExp(tokenPattern)).optional(),
+    after: z.string().min(1).max(idMaxLength).optional(),
+    query: z.string().min(1).max(500).optional()
+  })
+  .strict()
+  .transform(({ after, pageToken, ...query }) => ({
+    ...query,
+    pageToken: pageToken ?? after
+  }));
 
 export const handleParamsSchema = z.object({
-  handle: z.string().min(1).max(255)
-});
+  handle: z.string().min(1).max(255).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+}).strict();
 
 export const cartParamsSchema = z.object({
-  cartId: z.string().min(1).max(2000)
-});
+  cartId: cartIdSchema
+}).strict();
 
 export const cartLineInputSchema = z
   .object({
-    variantId: z.string().min(1).max(2000).optional(),
-    merchandiseId: z.string().min(1).max(2000).optional(),
+    variantId: variantIdSchema.optional(),
+    merchandiseId: variantIdSchema.optional(),
     quantity: z.number().int().min(1)
   })
+  .strict()
   .transform(({ variantId, merchandiseId, quantity }) => ({
     variantId: variantId ?? merchandiseId ?? '',
     quantity
   }))
   .pipe(
     z.object({
-      variantId: z.string().min(1).max(2000),
+      variantId: variantIdSchema,
       quantity: z.number().int().min(1)
     })
   );
 
 export const cartLineUpdateInputSchema = z
   .object({
-    cartLineId: z.string().min(1).max(2000).optional(),
-    id: z.string().min(1).max(2000).optional(),
-    variantId: z.string().min(1).max(2000).optional(),
-    merchandiseId: z.string().min(1).max(2000).optional(),
+    cartLineId: cartLineIdSchema.optional(),
+    id: cartLineIdSchema.optional(),
+    variantId: variantIdSchema.optional(),
+    merchandiseId: variantIdSchema.optional(),
     quantity: z.number().int().min(1)
   })
+  .strict()
   .transform(({ cartLineId, id, variantId, merchandiseId, quantity }) => ({
     cartLineId: cartLineId ?? id ?? '',
     variantId: variantId ?? merchandiseId ?? '',
@@ -50,25 +70,26 @@ export const cartLineUpdateInputSchema = z
   }))
   .pipe(
     z.object({
-      cartLineId: z.string().min(1).max(2000),
-      variantId: z.string().min(1).max(2000),
+      cartLineId: cartLineIdSchema,
+      variantId: variantIdSchema,
       quantity: z.number().int().min(1)
     })
   );
 
 export const cartLinesBodySchema = z.object({
   lines: z.array(cartLineInputSchema).min(1).max(100)
-});
+}).strict();
 
 export const cartLinesUpdateBodySchema = z.object({
   lines: z.array(cartLineUpdateInputSchema).min(1).max(100)
-});
+}).strict();
 
 export const cartLinesRemoveBodySchema = z
   .object({
-    cartLineIds: z.array(z.string().min(1).max(2000)).min(1).max(100).optional(),
-    lineIds: z.array(z.string().min(1).max(2000)).min(1).max(100).optional()
+    cartLineIds: z.array(cartLineIdSchema).min(1).max(100).optional(),
+    lineIds: z.array(cartLineIdSchema).min(1).max(100).optional()
   })
+  .strict()
   .transform(({ cartLineIds, lineIds }) => ({
     cartLineIds: cartLineIds ?? lineIds ?? []
   }))
@@ -237,6 +258,7 @@ export const checkoutUrlResponseSchema = {
 export const cartLinesBodyJsonSchema = {
   type: 'object',
   required: ['lines'],
+  additionalProperties: false,
   properties: {
     lines: {
       type: 'array',
@@ -245,10 +267,11 @@ export const cartLinesBodyJsonSchema = {
       items: {
         type: 'object',
         required: ['quantity'],
+        additionalProperties: false,
         anyOf: [{ required: ['variantId'] }, { required: ['merchandiseId'] }],
         properties: {
-          variantId: { type: 'string' },
-          merchandiseId: { type: 'string' },
+          variantId: { type: 'string', maxLength: idMaxLength },
+          merchandiseId: { type: 'string', maxLength: idMaxLength },
           quantity: { type: 'integer', minimum: 1 }
         }
       }
@@ -259,6 +282,7 @@ export const cartLinesBodyJsonSchema = {
 export const cartLinesUpdateBodyJsonSchema = {
   type: 'object',
   required: ['lines'],
+  additionalProperties: false,
   properties: {
     lines: {
       type: 'array',
@@ -267,17 +291,16 @@ export const cartLinesUpdateBodyJsonSchema = {
       items: {
         type: 'object',
         required: ['quantity'],
-        anyOf: [
-          { required: ['cartLineId'] },
-          { required: ['id'] },
-          { required: ['variantId'] },
-          { required: ['merchandiseId'] }
+        additionalProperties: false,
+        allOf: [
+          { anyOf: [{ required: ['cartLineId'] }, { required: ['id'] }] },
+          { anyOf: [{ required: ['variantId'] }, { required: ['merchandiseId'] }] }
         ],
         properties: {
-          cartLineId: { type: 'string' },
-          id: { type: 'string' },
-          variantId: { type: 'string' },
-          merchandiseId: { type: 'string' },
+          cartLineId: { type: 'string', maxLength: idMaxLength },
+          id: { type: 'string', maxLength: idMaxLength },
+          variantId: { type: 'string', maxLength: idMaxLength },
+          merchandiseId: { type: 'string', maxLength: idMaxLength },
           quantity: { type: 'integer', minimum: 1 }
         }
       }
@@ -287,19 +310,20 @@ export const cartLinesUpdateBodyJsonSchema = {
 
 export const cartLinesRemoveBodyJsonSchema = {
   type: 'object',
+  additionalProperties: false,
   anyOf: [{ required: ['cartLineIds'] }, { required: ['lineIds'] }],
   properties: {
     cartLineIds: {
       type: 'array',
       minItems: 1,
       maxItems: 100,
-      items: { type: 'string' }
+      items: { type: 'string', maxLength: idMaxLength }
     },
     lineIds: {
       type: 'array',
       minItems: 1,
       maxItems: 100,
-      items: { type: 'string' }
+      items: { type: 'string', maxLength: idMaxLength }
     }
   }
 } as const;
