@@ -67,4 +67,37 @@ describe('ShopifyService', () => {
       checkoutUrl: cartFixture.checkoutUrl
     });
   });
+
+  it('serializes concurrent cart mutations for the same cart', async () => {
+    const calls: string[] = [];
+    let releaseFirst!: () => void;
+    const firstCall = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const addCartLines = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        calls.push('first-start');
+        await firstCall;
+        calls.push('first-end');
+        return cartFixture;
+      })
+      .mockImplementationOnce(() => {
+        calls.push('second');
+        return Promise.resolve(cartFixture);
+      });
+    const service = new ShopifyService(createRepository({ addCartLines }));
+
+    await service.createCart('session-1', []);
+    const first = service.addCartLines('session-1', cartFixture.cartId, []);
+    const second = service.addCartLines('session-1', cartFixture.cartId, []);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toEqual(['first-start']);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(calls).toEqual(['first-start', 'first-end', 'second']);
+  });
 });

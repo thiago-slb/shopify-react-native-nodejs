@@ -33,7 +33,7 @@ const productFields = `
   handle
   description
   availableForSale
-  images(first: 10) {
+  images(first: $imageLimit) {
     edges {
       node {
         ${imageFields}
@@ -48,7 +48,7 @@ const productFields = `
       ${moneyFields}
     }
   }
-  variants(first: 100) {
+  variants(first: $variantLimit) {
     edges {
       node {
         ${variantFields}
@@ -105,7 +105,7 @@ const cartFields = `
 `;
 
 export const productsQuery = `
-  query Products($first: Int, $last: Int, $after: String, $before: String, $query: String) {
+  query Products($first: Int, $last: Int, $after: String, $before: String, $query: String, $imageLimit: Int!, $variantLimit: Int!) {
     products(first: $first, last: $last, after: $after, before: $before, query: $query) {
       pageInfo {
         hasNextPage
@@ -123,7 +123,7 @@ export const productsQuery = `
 `;
 
 export const productByHandleQuery = `
-  query ProductByHandle($handle: String!) {
+  query ProductByHandle($handle: String!, $imageLimit: Int!, $variantLimit: Int!) {
     productByHandle(handle: $handle) {
       ${productFields}
     }

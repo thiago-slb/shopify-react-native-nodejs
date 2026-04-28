@@ -56,9 +56,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     });
   }
 
-  const shopifyService =
-    options.shopifyService ??
-    new ShopifyService(new ShopifyStorefrontRepository(new ShopifyStorefrontClient(config)));
+  const storefrontClient = new ShopifyStorefrontClient(config);
+  const storefrontRepository = new ShopifyStorefrontRepository(storefrontClient, config);
+  const shopifyService = options.shopifyService ?? new ShopifyService(storefrontRepository);
   const demoOrdersService = new DemoOrdersService();
 
   fastify.setErrorHandler(errorHandler);
@@ -119,13 +119,43 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
             type: 'object',
             required: ['status'],
             properties: {
-              status: { type: 'string' }
+              status: { type: 'string' },
+              shopifyCircuitBreaker: {
+                type: 'object',
+                required: ['state', 'failures', 'openedUntil'],
+                properties: {
+                  state: { type: 'string' },
+                  failures: { type: 'number' },
+                  openedUntil: { type: ['number', 'null'] }
+                }
+              },
+              catalogCache: {
+                type: 'object',
+                required: [
+                  'hits',
+                  'staleHits',
+                  'misses',
+                  'lastListResponseBytes',
+                  'lastDetailResponseBytes'
+                ],
+                properties: {
+                  hits: { type: 'number' },
+                  staleHits: { type: 'number' },
+                  misses: { type: 'number' },
+                  lastListResponseBytes: { type: 'number' },
+                  lastDetailResponseBytes: { type: 'number' }
+                }
+              }
             }
           }
         }
       }
     },
-    () => ({ status: 'ok' })
+    () => ({
+      status: 'ok',
+      shopifyCircuitBreaker: storefrontClient.getCircuitBreakerState(),
+      catalogCache: storefrontRepository.getCatalogCacheMetrics()
+    })
   );
 
   await fastify.register(

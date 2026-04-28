@@ -37,7 +37,11 @@ describe('Shopify routes', () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok' });
+    expect(response.json()).toMatchObject({
+      status: 'ok',
+      shopifyCircuitBreaker: { state: 'closed', failures: 0 },
+      catalogCache: { hits: 0, staleHits: 0, misses: 0 }
+    });
   });
 
   it('does not expose Swagger UI when API docs are disabled', async () => {

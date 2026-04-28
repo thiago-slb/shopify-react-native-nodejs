@@ -1,5 +1,9 @@
 import type { AppConfig } from '../../../config/env.js';
-import { UpstreamError, UpstreamTimeoutError } from '../../../shared/errors/app-error.js';
+import {
+  UpstreamError,
+  UpstreamTimeoutError,
+  UpstreamUnavailableError
+} from '../../../shared/errors/app-error.js';
 
 type GraphQLError = {
   message: string;
@@ -16,8 +20,17 @@ type RequestOptions = {
   retriable?: boolean;
 };
 
+export type CircuitBreakerState = {
+  state: 'closed' | 'open' | 'half_open';
+  failures: number;
+  openedUntil: number | null;
+};
+
 export class ShopifyStorefrontClient {
   private readonly endpoint: string;
+  private circuitState: CircuitBreakerState['state'] = 'closed';
+  private failures = 0;
+  private openedUntil: number | null = null;
 
   constructor(
     private readonly config: Pick<
@@ -27,6 +40,8 @@ export class ShopifyStorefrontClient {
       | 'SHOPIFY_STOREFRONT_API_VERSION'
       | 'SHOPIFY_STOREFRONT_TIMEOUT_MS'
       | 'SHOPIFY_STOREFRONT_READ_RETRIES'
+      | 'SHOPIFY_CIRCUIT_FAILURE_THRESHOLD'
+      | 'SHOPIFY_CIRCUIT_OPEN_MS'
     >
   ) {
     this.endpoint = `https://${config.SHOPIFY_STORE_DOMAIN}/api/${config.SHOPIFY_STOREFRONT_API_VERSION}/graphql.json`;
@@ -37,15 +52,19 @@ export class ShopifyStorefrontClient {
     variables: TVariables,
     options: RequestOptions = {}
   ): Promise<TData> {
+    this.assertCircuitAllowsRequest();
     const maxAttempts = options.retriable ? this.config.SHOPIFY_STOREFRONT_READ_RETRIES + 1 : 1;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        return await this.fetchOnce(query, variables, attempt);
+        const data = await this.fetchOnce<TData, TVariables>(query, variables, attempt);
+        this.recordSuccess();
+        return data;
       } catch (error) {
         lastError = error;
         if (!options.retriable || attempt >= maxAttempts || !isRetriableError(error)) {
+          this.recordFailure(error);
           throw error;
         }
 
@@ -54,6 +73,22 @@ export class ShopifyStorefrontClient {
     }
 
     throw lastError;
+  }
+
+  getCircuitBreakerState(): CircuitBreakerState {
+    if (this.circuitState === 'open' && this.openedUntil && Date.now() >= this.openedUntil) {
+      return {
+        state: 'half_open',
+        failures: this.failures,
+        openedUntil: this.openedUntil
+      };
+    }
+
+    return {
+      state: this.circuitState,
+      failures: this.failures,
+      openedUntil: this.openedUntil
+    };
   }
 
   private async fetchOnce<TData, TVariables extends Record<string, unknown>>(
@@ -124,6 +159,37 @@ export class ShopifyStorefrontClient {
     }
 
     return body.data;
+  }
+
+  private assertCircuitAllowsRequest(): void {
+    const state = this.getCircuitBreakerState();
+    if (state.state === 'open') {
+      throw new UpstreamUnavailableError('Shopify Storefront API circuit breaker is open', {
+        circuitBreaker: state
+      });
+    }
+
+    if (state.state === 'half_open') {
+      this.circuitState = 'half_open';
+    }
+  }
+
+  private recordSuccess(): void {
+    this.circuitState = 'closed';
+    this.failures = 0;
+    this.openedUntil = null;
+  }
+
+  private recordFailure(error: unknown): void {
+    if (!isRetriableError(error)) {
+      return;
+    }
+
+    this.failures += 1;
+    if (this.failures >= this.config.SHOPIFY_CIRCUIT_FAILURE_THRESHOLD) {
+      this.circuitState = 'open';
+      this.openedUntil = Date.now() + this.config.SHOPIFY_CIRCUIT_OPEN_MS;
+    }
   }
 }
 

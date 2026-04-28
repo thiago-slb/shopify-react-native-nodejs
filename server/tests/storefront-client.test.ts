@@ -69,5 +69,25 @@ describe('ShopifyStorefrontClient', () => {
       code: 'UPSTREAM_TIMEOUT'
     });
   });
-});
 
+  it('opens the circuit after repeated upstream failures', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new ShopifyStorefrontClient({
+      ...testConfig,
+      SHOPIFY_STOREFRONT_READ_RETRIES: 0,
+      SHOPIFY_CIRCUIT_FAILURE_THRESHOLD: 1,
+      SHOPIFY_CIRCUIT_OPEN_MS: 30_000
+    });
+
+    await expect(client.request('query Test { ok }', {}, { retriable: true })).rejects.toMatchObject({
+      code: 'UPSTREAM_SERVICE_ERROR'
+    });
+    await expect(client.request('mutation CartCreate { cartCreate }', {})).rejects.toMatchObject({
+      code: 'SHOPIFY_UNAVAILABLE'
+    });
+    expect(client.getCircuitBreakerState()).toMatchObject({ state: 'open', failures: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

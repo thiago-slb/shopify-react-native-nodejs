@@ -57,6 +57,14 @@ SHOPIFY_STOREFRONT_ACCESS_TOKEN=your_storefront_access_token
 SHOPIFY_STOREFRONT_API_VERSION=2025-01
 SHOPIFY_STOREFRONT_TIMEOUT_MS=5000
 SHOPIFY_STOREFRONT_READ_RETRIES=2
+SHOPIFY_CIRCUIT_FAILURE_THRESHOLD=5
+SHOPIFY_CIRCUIT_OPEN_MS=30000
+PRODUCT_CACHE_TTL_MS=30000
+PRODUCT_CACHE_STALE_MS=300000
+PRODUCT_LIST_IMAGE_LIMIT=1
+PRODUCT_LIST_VARIANT_LIMIT=20
+PRODUCT_DETAIL_IMAGE_LIMIT=10
+PRODUCT_DETAIL_VARIANT_LIMIT=100
 ```
 
 `SHOPIFY_STORE_DOMAIN` should be the store domain without `https://`. The token must be a
@@ -75,6 +83,13 @@ the `rate_limit.limited_request` metric key.
 Shopify Storefront requests are aborted after `SHOPIFY_STOREFRONT_TIMEOUT_MS`. Product and cart read
 queries are retried with bounded exponential backoff up to `SHOPIFY_STOREFRONT_READ_RETRIES`; cart
 mutations are not retried automatically.
+
+The Storefront client opens an in-process circuit breaker after repeated upstream failures. While the
+breaker is open, catalog routes can serve stale cached product list/detail responses within
+`PRODUCT_CACHE_STALE_MS`; cart mutations fail fast with `SHOPIFY_UNAVAILABLE`. Health responses
+include `shopifyCircuitBreaker` and `catalogCache` counters for operational visibility. Catalog list
+queries intentionally use lighter image and variant limits than detail queries; tune the
+`PRODUCT_*_LIMIT` variables for your catalog size and payload budget.
 
 ### Run Locally
 
@@ -111,6 +126,8 @@ Health check:
 ```text
 GET http://localhost:3000/health
 ```
+
+The health response includes circuit breaker state and catalog cache hit counters.
 
 ### How Shopify Integration Works
 

@@ -155,7 +155,7 @@
     },
     {
       "id": "server-resilience-002",
-      "status": "todo",
+      "status": "completed",
       "priority": "high",
       "category": "resilience",
       "title": "Add circuit breaker and Shopify degradation strategy",
@@ -172,7 +172,7 @@
     },
     {
       "id": "server-performance-001",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "performance",
       "title": "Introduce product catalog caching",
@@ -191,7 +191,7 @@
     },
     {
       "id": "server-performance-002",
-      "status": "todo",
+      "status": "completed",
       "priority": "high",
       "category": "performance",
       "title": "Reduce product query payload size and make image/variant limits configurable",
@@ -208,7 +208,7 @@
     },
     {
       "id": "server-concurrency-001",
-      "status": "todo",
+      "status": "completed",
       "priority": "critical",
       "category": "concurrency",
       "title": "Design cart mutation serialization or conflict handling",

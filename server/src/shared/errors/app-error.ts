@@ -44,6 +44,18 @@ export class UpstreamTimeoutError extends AppError {
   }
 }
 
+export class UpstreamUnavailableError extends AppError {
+  constructor(message = 'Upstream service unavailable', details?: unknown) {
+    super(message, 503, 'SHOPIFY_UNAVAILABLE', details);
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message = 'Conflict', details?: unknown, code = 'CONFLICT') {
+    super(message, 409, code, details);
+  }
+}
+
 export class UnauthorizedError extends AppError {
   constructor(message = 'Authentication required', details?: unknown) {
     super(message, 401, 'AUTHENTICATION_REQUIRED', details);

@@ -53,6 +53,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           200: productsResponseSchema,
           400: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -80,6 +81,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           200: productResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -104,6 +106,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           400: errorResponseSchema,
           401: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -135,6 +138,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           403: errorResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -166,8 +170,10 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           400: errorResponseSchema,
           401: errorResponseSchema,
           403: errorResponseSchema,
+          409: errorResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -200,8 +206,10 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           400: errorResponseSchema,
           401: errorResponseSchema,
           403: errorResponseSchema,
+          409: errorResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -234,8 +242,10 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           400: errorResponseSchema,
           401: errorResponseSchema,
           403: errorResponseSchema,
+          409: errorResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
@@ -268,6 +278,7 @@ export function registerShopifyRoutes(fastify: FastifyInstance, service: Shopify
           403: errorResponseSchema,
           404: errorResponseSchema,
           429: errorResponseSchema,
+          503: errorResponseSchema,
           502: errorResponseSchema
         }
       },
