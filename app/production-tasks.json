@@ -1,0 +1,339 @@
+{
+  "project": "app",
+  "purpose": "Production-readiness backlog for the Expo React Native Shopify shopping app.",
+  "statusValues": ["todo", "doing", "completed", "blocked", "wont_do"],
+  "generatedAt": "2026-04-28",
+  "tasks": [
+    {
+      "id": "app-api-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "api-contract",
+      "title": "Move mobile DTOs away from Shopify internal identifiers",
+      "rationale": "The app currently stores and sends Shopify GIDs for products, variants, carts, and cart lines. That couples UI and persistence to Shopify internals.",
+      "acceptanceCriteria": [
+        "Consume app-owned opaque IDs from the backend.",
+        "Do not persist raw gid://shopify/... values in AsyncStorage.",
+        "Update cart API payloads to use backend contract IDs.",
+        "Add migration/clear strategy for existing persisted POC cart state."
+      ],
+      "references": [
+        "app/src/features/products/types/product.ts",
+        "app/src/features/cart/types/cart.ts",
+        "app/src/features/cart/store/cart-store.ts:53"
+      ]
+    },
+    {
+      "id": "app-api-002",
+      "status": "todo",
+      "priority": "critical",
+      "category": "api-contract",
+      "title": "Stop relying on demo order and rebuy contracts",
+      "rationale": "Orders currently depend on demo backend data and fake variant IDs. Purchase again will fail against a real store unless replaced by authenticated real order data.",
+      "acceptanceCriteria": [
+        "Integrate with production order history endpoint.",
+        "Represent order states accurately.",
+        "Handle unavailable or discontinued rebuy items.",
+        "Show partial rebuy results when some variants cannot be added."
+      ],
+      "references": [
+        "app/src/features/orders/api/orders-api.ts",
+        "app/src/features/orders/types/order.ts"
+      ]
+    },
+    {
+      "id": "app-security-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "security",
+      "title": "Add app authentication/session handling",
+      "rationale": "The app has no authenticated identity, so cart ownership, order history, and purchase-again cannot be safely productionized.",
+      "acceptanceCriteria": [
+        "Choose auth strategy compatible with Shopify/customer identity.",
+        "Store tokens in secure storage, not plain AsyncStorage.",
+        "Attach auth headers through the shared API client.",
+        "Handle token refresh, logout, and unauthorized states."
+      ],
+      "references": [
+        "app/src/shared/api/client.ts",
+        "app/src/features/cart/store/cart-store.ts"
+      ]
+    },
+    {
+      "id": "app-security-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "security",
+      "title": "Validate backend base URL and environment separation",
+      "rationale": "The app falls back to localhost and logs a warning if EXPO_PUBLIC_API_BASE_URL is absent. Production builds should fail configuration validation rather than silently targeting localhost.",
+      "acceptanceCriteria": [
+        "Validate EXPO_PUBLIC_API_BASE_URL at startup.",
+        "Fail production builds when the URL is missing or non-HTTPS.",
+        "Define separate dev/staging/prod env files.",
+        "Document EAS build environment configuration."
+      ],
+      "references": [
+        "app/src/shared/config/env.ts"
+      ]
+    },
+    {
+      "id": "app-checkout-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "checkout",
+      "title": "Productionize Shopify Checkout Sheet Kit integration",
+      "rationale": "Checkout now uses Shopify Checkout Sheet Kit. Production still needs robust lifecycle handling, native build validation, and backend reconciliation.",
+      "acceptanceCriteria": [
+        "Validate Checkout Sheet Kit on iOS and Android release builds.",
+        "Handle completed, close, error, and relevant pixel lifecycle events.",
+        "Do not treat Checkout Sheet completion alone as payment proof.",
+        "Add backend order/webhook reconciliation after completion.",
+        "Document native platform requirements including iOS minimum and Android minSdkVersion."
+      ],
+      "references": [
+        "app/app/_layout.tsx",
+        "app/app/cart/checkout.tsx"
+      ]
+    },
+    {
+      "id": "app-concurrency-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "concurrency",
+      "title": "Serialize cart mutations on the client",
+      "rationale": "Current Zustand actions allow overlapping add/update/remove calls. Race conditions can reconcile stale Shopify responses and corrupt local cart state.",
+      "acceptanceCriteria": [
+        "Introduce a cart mutation queue or disable per-line controls while relevant mutations are pending.",
+        "Attach operation IDs to optimistic updates.",
+        "Ignore stale mutation responses.",
+        "Add tests for rapid repeated taps and concurrent line changes."
+      ],
+      "references": [
+        "app/src/features/cart/store/cart-store.ts:53",
+        "app/src/features/cart/store/cart-store.ts:117",
+        "app/src/features/cart/store/cart-store.ts:157"
+      ]
+    },
+    {
+      "id": "app-concurrency-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "concurrency",
+      "title": "Add idempotency keys to cart write requests",
+      "rationale": "Mobile retries and repeated taps can duplicate add-to-cart operations. The client should cooperate with backend idempotency.",
+      "acceptanceCriteria": [
+        "Generate idempotency keys for cart create and add operations.",
+        "Send Idempotency-Key headers through the API client.",
+        "Persist pending operation keys until completion.",
+        "Handle duplicate idempotency responses gracefully."
+      ],
+      "references": [
+        "app/src/features/cart/api/cart-api.ts",
+        "app/src/features/cart/store/cart-store.ts:81"
+      ]
+    },
+    {
+      "id": "app-resilience-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "resilience",
+      "title": "Add request timeout, retry, and offline behavior",
+      "rationale": "fetch calls have no explicit timeout, no network status awareness, and no offline queue for cart operations.",
+      "acceptanceCriteria": [
+        "Add AbortController timeout support in the API client.",
+        "Retry safe reads with bounded policy.",
+        "Do not retry cart writes without idempotency.",
+        "Detect offline state and show intentional UI.",
+        "Queue or block cart mutations while offline."
+      ],
+      "references": [
+        "app/src/shared/api/client.ts"
+      ]
+    },
+    {
+      "id": "app-resilience-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "resilience",
+      "title": "Refresh persisted cart from backend on app start",
+      "rationale": "The app persists cart lines locally but does not reconcile the stored cart with Shopify when the app opens. Carts can expire or change server-side.",
+      "acceptanceCriteria": [
+        "Fetch persisted cartId on launch/resume.",
+        "Clear or recover expired carts.",
+        "Reconcile local items with backend cart state before checkout.",
+        "Show recovery UI when cart is no longer valid."
+      ],
+      "references": [
+        "app/src/features/cart/store/cart-store.ts:193",
+        "app/src/features/cart/api/cart-api.ts:14"
+      ]
+    },
+    {
+      "id": "app-performance-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "performance",
+      "title": "Add pagination/infinite scroll to product browsing",
+      "rationale": "The Home screen only fetches the first 20 products. Real catalogs need paginated browsing and careful memory behavior.",
+      "acceptanceCriteria": [
+        "Switch products hook to useInfiniteQuery.",
+        "Use backend opaque pagination tokens.",
+        "Add onEndReached loading state.",
+        "Avoid duplicate products across pages.",
+        "Add tests for query keys and pagination behavior."
+      ],
+      "references": [
+        "app/src/features/products/hooks/use-products.ts",
+        "app/app/(tabs)/index.tsx:95"
+      ]
+    },
+    {
+      "id": "app-performance-002",
+      "status": "todo",
+      "priority": "medium",
+      "category": "performance",
+      "title": "Optimize image loading and product card rendering",
+      "rationale": "The grid uses remote images directly. Production catalogs need thumbnail sizing, cache policy, placeholders, and render profiling.",
+      "acceptanceCriteria": [
+        "Request or consume optimized image URLs/sizes from backend.",
+        "Set explicit cache policy for expo-image.",
+        "Add image load failure fallback.",
+        "Profile list scrolling on low-end Android devices.",
+        "Tune FlatList parameters with real catalog data."
+      ],
+      "references": [
+        "app/src/features/products/components/ProductCard.tsx"
+      ]
+    },
+    {
+      "id": "app-ux-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "ux",
+      "title": "Add product detail and variant selection flow",
+      "rationale": "The Home card auto-selects the first available variant. Production shopping needs explicit variant selection to avoid wrong size/color purchases.",
+      "acceptanceCriteria": [
+        "Add product detail route using GET /api/products/:handle.",
+        "Display full images, description, options, availability, and price.",
+        "Require/select variant before adding to cart.",
+        "Handle unavailable option combinations."
+      ],
+      "references": [
+        "app/src/features/products/components/ProductCard.tsx:20"
+      ]
+    },
+    {
+      "id": "app-ux-002",
+      "status": "todo",
+      "priority": "medium",
+      "category": "ux",
+      "title": "Improve cart error recovery and partial failure UX",
+      "rationale": "Cart sync errors are shown as a small text line on Home and a generic line in Cart. Production users need clear recovery actions.",
+      "acceptanceCriteria": [
+        "Show actionable retry/reconcile/clear-cart controls.",
+        "Show per-line errors for unavailable variants or quantity issues.",
+        "Prevent checkout while cart is stale or failed.",
+        "Add accessible announcements for cart changes."
+      ],
+      "references": [
+        "app/app/(tabs)/index.tsx:72",
+        "app/app/cart/index.tsx:28"
+      ]
+    },
+    {
+      "id": "app-observability-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "observability",
+      "title": "Add mobile analytics, crash reporting, and client logs",
+      "rationale": "There is no visibility into product search latency, add-to-cart failures, checkout drops, crashes, or user flows.",
+      "acceptanceCriteria": [
+        "Add crash reporting provider.",
+        "Add privacy-aware analytics events for search, add-to-cart, cart update, checkout start, checkout sheet completion signal.",
+        "Capture API error codes and latency.",
+        "Do not log PII or secrets.",
+        "Document event taxonomy."
+      ],
+      "references": [
+        "app/src/shared/api/client.ts",
+        "app/app/cart/checkout.tsx"
+      ]
+    },
+    {
+      "id": "app-accessibility-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "accessibility",
+      "title": "Complete accessibility pass",
+      "rationale": "The POC has basic labels in places, but cart controls, order cards, loading states, and dynamic updates need full screen reader and touch target coverage.",
+      "acceptanceCriteria": [
+        "Add accessibilityRole, accessibilityLabel, and accessibilityHint for buttons and controls.",
+        "Verify minimum touch target sizes.",
+        "Support dynamic type where practical.",
+        "Test VoiceOver and TalkBack flows.",
+        "Add accessibility checklist to PR review."
+      ],
+      "references": [
+        "app/src/features/cart/components/CartLineRow.tsx",
+        "app/src/features/products/components/ProductCard.tsx",
+        "app/src/features/orders/components/OrderCard.tsx"
+      ]
+    },
+    {
+      "id": "app-testing-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "testing",
+      "title": "Add production-grade test coverage",
+      "rationale": "Current tests cover a few utilities/store behaviors. The app needs component, integration, and E2E coverage for core commerce flows.",
+      "acceptanceCriteria": [
+        "Add React Native Testing Library.",
+        "Test Home loading/error/empty/success states.",
+        "Test cart modal quantity and removal behavior.",
+        "Test Checkout Sheet lifecycle handling.",
+        "Add Detox/Maestro E2E for browse, add to cart, checkout start, purchase again.",
+        "Run tests in CI."
+      ],
+      "references": [
+        "app/tests"
+      ]
+    },
+    {
+      "id": "app-release-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "release",
+      "title": "Set up production Expo/EAS build and release process",
+      "rationale": "The app is a local Expo POC. Production requires build profiles, signing, env separation, OTA update policy, and store readiness.",
+      "acceptanceCriteria": [
+        "Add EAS build profiles for development, preview, and production.",
+        "Configure production bundle identifiers and app metadata.",
+        "Define OTA update policy and rollback strategy.",
+        "Add CI gates for lint, typecheck, tests, and build validation.",
+        "Document release checklist."
+      ],
+      "references": [
+        "app/app.json",
+        "app/package.json"
+      ]
+    },
+    {
+      "id": "app-dependency-001",
+      "status": "todo",
+      "priority": "medium",
+      "category": "dependencies",
+      "title": "Resolve dependency audit and runtime version risks",
+      "rationale": "npm install reported moderate vulnerabilities, and Expo had runtime issues under Node 25 in this environment. Production should pin supported Node and handle dependency risk.",
+      "acceptanceCriteria": [
+        "Pin Node LTS version with .nvmrc or Volta.",
+        "Audit dependencies and decide fixes/acceptances.",
+        "Keep Expo SDK compatible versions aligned.",
+        "Add dependency update policy."
+      ],
+      "references": [
+        "app/package.json",
+        "app/package-lock.json"
+      ]
+    }
+  ]
+}

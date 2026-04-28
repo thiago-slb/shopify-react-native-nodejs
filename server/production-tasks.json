@@ -1,0 +1,374 @@
+{
+  "project": "server",
+  "purpose": "Production-readiness backlog for the Fastify Shopify integration backend.",
+  "statusValues": ["todo", "doing", "completed", "blocked", "wont_do"],
+  "generatedAt": "2026-04-28",
+  "tasks": [
+    {
+      "id": "server-api-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "api-contract",
+      "title": "Stop exposing Shopify GIDs as the primary public API model",
+      "rationale": "The current product, variant, cart, and cart-line DTOs expose Shopify global IDs directly. This couples the mobile app to Shopify internals and makes provider migration, replay protection, and authorization boundaries harder.",
+      "acceptanceCriteria": [
+        "Introduce app-level productId, variantId, cartId, and cartLineId aliases or opaque IDs.",
+        "Keep Shopify GIDs behind server-side mapping/encoding logic.",
+        "Mobile app no longer needs to understand gid://shopify/... identifiers except through opaque backend contracts.",
+        "Backward compatibility plan exists if current clients already consume GIDs."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:118",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:142",
+        "server/src/modules/shopify/presentation/shopify-schemas.ts:58",
+        "server/src/modules/shopify/presentation/shopify-schemas.ts:130"
+      ]
+    },
+    {
+      "id": "server-api-002",
+      "status": "todo",
+      "priority": "critical",
+      "category": "api-contract",
+      "title": "Normalize Shopify userErrors into stable domain error codes",
+      "rationale": "The backend currently returns Shopify userErrors fields, messages, and codes inside details. That leaks provider semantics and creates unstable mobile behavior if Shopify changes wording or field paths.",
+      "acceptanceCriteria": [
+        "Map Shopify userErrors to backend-owned codes such as CART_LINE_UNAVAILABLE, CART_EXPIRED, INVALID_VARIANT, QUANTITY_UNAVAILABLE.",
+        "Return user-safe messages that do not expose Shopify field paths.",
+        "Log raw Shopify error metadata internally with request correlation.",
+        "Add tests for each mapped cart failure mode."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:94",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:158"
+      ]
+    },
+    {
+      "id": "server-api-003",
+      "status": "todo",
+      "priority": "high",
+      "category": "api-contract",
+      "title": "Separate Storefront pagination cursors from public pagination tokens",
+      "rationale": "The product list response returns Storefront cursors directly. Cursors are upstream implementation details and can be tampered with or become invalid across provider changes.",
+      "acceptanceCriteria": [
+        "Expose opaque nextPageToken/previousPageToken values.",
+        "Validate and decode tokens server-side.",
+        "Reject malformed tokens with a stable API error.",
+        "Document token expiry and compatibility rules."
+      ],
+      "references": [
+        "server/src/modules/shopify/presentation/shopify-schemas.ts:112",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:177"
+      ]
+    },
+    {
+      "id": "server-security-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "security",
+      "title": "Add authentication and cart ownership model",
+      "rationale": "Anyone with a cart ID can fetch or mutate that cart. Shopify cart IDs are bearer-like identifiers; without app auth and ownership binding, cart tampering and checkout URL disclosure are possible.",
+      "acceptanceCriteria": [
+        "Define auth strategy for mobile clients.",
+        "Bind carts to authenticated user/session/device identity.",
+        "Reject cart operations when ownership does not match.",
+        "Add tests for cross-user cart access attempts."
+      ],
+      "references": [
+        "server/src/modules/shopify/presentation/shopify-routes.ts:74",
+        "server/src/modules/shopify/presentation/shopify-routes.ts:100"
+      ]
+    },
+    {
+      "id": "server-security-002",
+      "status": "todo",
+      "priority": "critical",
+      "category": "security",
+      "title": "Add API rate limiting and abuse protection",
+      "rationale": "Catalog search and cart mutations proxy directly to Shopify. Without per-IP/user/device limits, the backend can amplify abuse into upstream rate limits and cost.",
+      "acceptanceCriteria": [
+        "Add Fastify rate limit plugin with route-specific budgets.",
+        "Use stricter budgets for cart mutations and checkout URL creation.",
+        "Use distributed storage such as Redis for multi-instance deployments.",
+        "Return Retry-After headers and stable RATE_LIMITED error responses.",
+        "Add metrics for limited requests."
+      ],
+      "references": [
+        "server/src/app.ts:51",
+        "server/src/modules/shopify/presentation/shopify-routes.ts:20"
+      ]
+    },
+    {
+      "id": "server-security-003",
+      "status": "todo",
+      "priority": "high",
+      "category": "security",
+      "title": "Lock down CORS and production docs exposure",
+      "rationale": "CORS defaults to wildcard and Swagger UI is always registered. That is fine for a POC, but production should restrict origins and avoid public interactive docs unless intentionally protected.",
+      "acceptanceCriteria": [
+        "Fail startup in production when CORS_ORIGIN is wildcard.",
+        "Support allowlisted mobile/web origins.",
+        "Gate Swagger UI behind NODE_ENV or auth.",
+        "Document production CORS and docs policy."
+      ],
+      "references": [
+        "server/src/config/env.ts:8",
+        "server/src/app.ts:21",
+        "server/src/app.ts:66"
+      ]
+    },
+    {
+      "id": "server-security-004",
+      "status": "todo",
+      "priority": "high",
+      "category": "security",
+      "title": "Harden request validation for Shopify identifiers and body sizes",
+      "rationale": "Current validation only checks non-empty strings for cart IDs, line IDs, and merchandise IDs. This permits oversized or malformed payloads to reach downstream logic.",
+      "acceptanceCriteria": [
+        "Add maximum string lengths for all IDs.",
+        "Validate expected opaque ID format or encoded token format.",
+        "Configure Fastify bodyLimit.",
+        "Reject unknown body fields where appropriate.",
+        "Add fuzz/negative validation tests."
+      ],
+      "references": [
+        "server/src/modules/shopify/presentation/shopify-schemas.ts:13",
+        "server/src/modules/shopify/presentation/shopify-schemas.ts:17",
+        "server/src/app.ts:38"
+      ]
+    },
+    {
+      "id": "server-resilience-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "resilience",
+      "title": "Add upstream timeouts, aborts, and retry policy for Shopify calls",
+      "rationale": "Storefront fetch calls currently have no explicit timeout. Slow upstream responses can consume request slots and create cascading latency under load.",
+      "acceptanceCriteria": [
+        "Use AbortController with a configurable Shopify timeout.",
+        "Retry only safe/idempotent reads with bounded exponential backoff.",
+        "Do not blindly retry cart mutations unless idempotency is designed.",
+        "Return stable timeout errors and log upstream latency."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/storefront-client.ts:31"
+      ]
+    },
+    {
+      "id": "server-resilience-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "resilience",
+      "title": "Add circuit breaker and Shopify degradation strategy",
+      "rationale": "A Shopify outage currently means every request attempts another upstream call. Under incident conditions this worsens latency and thread/socket pressure.",
+      "acceptanceCriteria": [
+        "Add a circuit breaker around Storefront API calls.",
+        "Serve cached catalog reads when breaker is open.",
+        "Fail cart mutations fast with actionable errors.",
+        "Expose breaker state in operational metrics."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/storefront-client.ts:27"
+      ]
+    },
+    {
+      "id": "server-performance-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "performance",
+      "title": "Introduce product catalog caching",
+      "rationale": "Every product list/search/detail call hits Shopify. Product catalog reads are high-volume and mostly cacheable, so this is the first obvious bottleneck.",
+      "acceptanceCriteria": [
+        "Cache product list and detail responses with short TTLs.",
+        "Use separate keys for query, first, and pagination token.",
+        "Add stale-while-revalidate behavior if feasible.",
+        "Invalidate or refresh via webhook/admin sync later.",
+        "Measure cache hit ratio."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:166",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:193"
+      ]
+    },
+    {
+      "id": "server-performance-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "performance",
+      "title": "Reduce product query payload size and make image/variant limits configurable",
+      "rationale": "The backend fetches 10 images and 100 variants per product for every list request. This can become expensive and slow for large catalogs.",
+      "acceptanceCriteria": [
+        "Use lighter list DTOs and reserve full variant/image payloads for detail pages where possible.",
+        "Make image and variant limits configurable.",
+        "Add response size metrics.",
+        "Load-test catalog list latency with realistic products."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/storefront-queries.ts"
+      ]
+    },
+    {
+      "id": "server-concurrency-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "concurrency",
+      "title": "Design cart mutation serialization or conflict handling",
+      "rationale": "Multiple concurrent add/update/remove requests for the same cart can race. The last Shopify response wins and the client can reconcile stale state.",
+      "acceptanceCriteria": [
+        "Define per-cart mutation ordering strategy.",
+        "Use queueing, version checks, or server-side idempotency keys.",
+        "Return conflict responses where mutation order cannot be guaranteed.",
+        "Add concurrent mutation tests."
+      ],
+      "references": [
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:220",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:230",
+        "server/src/modules/shopify/infra/shopify-storefront-repository.ts:241"
+      ]
+    },
+    {
+      "id": "server-concurrency-002",
+      "status": "todo",
+      "priority": "high",
+      "category": "concurrency",
+      "title": "Add idempotency support for create cart and add lines",
+      "rationale": "Mobile retries, flaky networks, or repeated taps can create duplicate carts or duplicate lines.",
+      "acceptanceCriteria": [
+        "Accept Idempotency-Key headers for cart creation and line adds.",
+        "Persist idempotency results with TTL.",
+        "Return previous result for duplicate idempotency keys.",
+        "Document retry semantics for the mobile app."
+      ],
+      "references": [
+        "server/src/modules/shopify/presentation/shopify-routes.ts:64",
+        "server/src/modules/shopify/presentation/shopify-routes.ts:100"
+      ]
+    },
+    {
+      "id": "server-observability-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "observability",
+      "title": "Add request correlation, metrics, and tracing",
+      "rationale": "Structured logging exists, but there are no request IDs, upstream latency metrics, Shopify operation tags, cart mutation counters, or distributed traces.",
+      "acceptanceCriteria": [
+        "Generate or accept request IDs.",
+        "Emit structured logs with route, operation, status, duration, and request ID.",
+        "Add Prometheus/OpenTelemetry metrics.",
+        "Trace Shopify calls separately from Fastify route handling.",
+        "Redact tokens and sensitive IDs consistently."
+      ],
+      "references": [
+        "server/src/shared/logger/logger.ts:3",
+        "server/src/modules/shopify/infra/storefront-client.ts:31"
+      ]
+    },
+    {
+      "id": "server-observability-002",
+      "status": "todo",
+      "priority": "medium",
+      "category": "observability",
+      "title": "Upgrade health checks to readiness and liveness checks",
+      "rationale": "The current health endpoint only returns ok and does not prove env/config readiness, Shopify reachability, cache readiness, or DB/Redis readiness once added.",
+      "acceptanceCriteria": [
+        "Expose /health/live and /health/ready.",
+        "Readiness checks required dependencies without creating heavy load.",
+        "Return machine-readable dependency status.",
+        "Integrate with deployment probes."
+      ],
+      "references": [
+        "server/src/app.ts:74"
+      ]
+    },
+    {
+      "id": "server-orders-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "orders",
+      "title": "Replace demo orders with a production order history strategy",
+      "rationale": "Demo orders are hard-coded and contain fake merchandise IDs. This must not ship as production order history.",
+      "acceptanceCriteria": [
+        "Choose customer-token Storefront order fetching, webhook-backed order projection, or Admin API mediated backend service.",
+        "Remove hard-coded demo orders from production builds.",
+        "Model order ownership and authentication.",
+        "Ensure purchase-again uses real current variant IDs or mapping rules."
+      ],
+      "references": [
+        "server/src/modules/shopify/application/demo-orders-service.ts:6",
+        "server/src/app.ts:96"
+      ]
+    },
+    {
+      "id": "server-checkout-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "checkout",
+      "title": "Implement checkout completion reconciliation",
+      "rationale": "Returning checkoutUrl alone is fine for opening checkout, but production needs backend confirmation of payment/order state rather than trusting a client-side URL transition.",
+      "acceptanceCriteria": [
+        "Add Shopify webhook handling for checkout/order completion.",
+        "Verify webhook HMAC signatures.",
+        "Persist order state and expose app-friendly order detail endpoint.",
+        "Handle duplicate webhooks idempotently.",
+        "Do not trust mobile completion signals as payment proof."
+      ],
+      "references": [
+        "server/src/modules/shopify/application/shopify-service.ts",
+        "server/src/modules/shopify/presentation/shopify-routes.ts:176"
+      ]
+    },
+    {
+      "id": "server-data-001",
+      "status": "todo",
+      "priority": "critical",
+      "category": "data",
+      "title": "Add persistent storage for users, carts, idempotency, and orders",
+      "rationale": "The backend is currently stateless. Production features like cart ownership, idempotency, order projection, and audit trails require durable storage.",
+      "acceptanceCriteria": [
+        "Select database and migration tool.",
+        "Create schemas for users/sessions, carts, cart ownership, idempotency keys, orders, webhook events.",
+        "Add repository abstractions and tests.",
+        "Define retention and privacy policies."
+      ],
+      "references": [
+        "server/src/modules/shopify/application"
+      ]
+    },
+    {
+      "id": "server-testing-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "testing",
+      "title": "Expand integration, contract, and load tests",
+      "rationale": "Current tests cover happy-ish service/routes and repository mapping. Production needs contract tests, concurrency tests, upstream failure tests, and performance tests.",
+      "acceptanceCriteria": [
+        "Add API contract tests for all routes and error envelopes.",
+        "Add Storefront client tests for non-JSON, timeout, 429, and GraphQL error responses.",
+        "Add concurrent cart mutation tests.",
+        "Add load tests for product search and cart mutation paths.",
+        "Add CI gates for lint/typecheck/test/build."
+      ],
+      "references": [
+        "server/tests"
+      ]
+    },
+    {
+      "id": "server-deploy-001",
+      "status": "todo",
+      "priority": "high",
+      "category": "deployment",
+      "title": "Productionize deployment, secrets, and runtime configuration",
+      "rationale": "The project has local env validation but no deployment artifact, secret manager integration, or runtime hardening.",
+      "acceptanceCriteria": [
+        "Add Dockerfile or deployment-specific build artifact.",
+        "Load secrets from a secret manager in production.",
+        "Set NODE_ENV=production and validate required production-only settings.",
+        "Define horizontal scaling model and graceful shutdown.",
+        "Add security headers where applicable."
+      ],
+      "references": [
+        "server/src/config/env.ts",
+        "server/src/server.ts"
+      ]
+    }
+  ]
+}
