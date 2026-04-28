@@ -8,6 +8,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useState } from 'react';
+import { isCheckoutSheetAvailable } from '@/src/features/checkout/checkout-sheet-availability';
 import { colors } from '@/src/shared/theme/theme';
 
 export const unstable_settings = {
@@ -26,6 +27,43 @@ export default function RootLayout() {
         }
       })
   );
+  const app = (
+    <QueryClientProvider client={queryClient}>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="cart/index"
+          options={{
+            presentation: 'modal',
+            title: 'Cart',
+            headerStyle: { backgroundColor: colors.background },
+            headerShadowVisible: false
+          }}
+        />
+        <Stack.Screen
+          name="cart/checkout"
+          options={{
+            title: 'Checkout',
+            headerStyle: { backgroundColor: colors.background },
+            headerShadowVisible: false
+          }}
+        />
+        <Stack.Screen
+          name="cart/order-complete"
+          options={{
+            title: 'Order complete',
+            headerStyle: { backgroundColor: colors.background },
+            headerShadowVisible: false
+          }}
+        />
+      </Stack>
+      <StatusBar style="dark" />
+    </QueryClientProvider>
+  );
+
+  if (!isCheckoutSheetAvailable()) {
+    return app;
+  }
 
   return (
     <ShopifyCheckoutSheetProvider
@@ -58,37 +96,7 @@ export default function RootLayout() {
           }
         }
       }}>
-      <QueryClientProvider client={queryClient}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="cart/index"
-          options={{
-            presentation: 'modal',
-            title: 'Cart',
-            headerStyle: { backgroundColor: colors.background },
-            headerShadowVisible: false
-          }}
-        />
-        <Stack.Screen
-          name="cart/checkout"
-          options={{
-            title: 'Checkout',
-            headerStyle: { backgroundColor: colors.background },
-            headerShadowVisible: false
-          }}
-        />
-        <Stack.Screen
-          name="cart/order-complete"
-          options={{
-            title: 'Order complete',
-            headerStyle: { backgroundColor: colors.background },
-            headerShadowVisible: false
-          }}
-        />
-      </Stack>
-      <StatusBar style="dark" />
-    </QueryClientProvider>
+      {app}
     </ShopifyCheckoutSheetProvider>
   );
 }

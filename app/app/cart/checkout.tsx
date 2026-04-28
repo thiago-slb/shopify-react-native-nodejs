@@ -9,12 +9,28 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { getCheckoutUrl } from '@/src/features/cart/api/cart-api';
 import { useCartStore } from '@/src/features/cart/store/cart-store';
+import { isCheckoutSheetAvailable } from '@/src/features/checkout/checkout-sheet-availability';
 import { PrimaryButton } from '@/src/shared/components/PrimaryButton';
 import { Screen } from '@/src/shared/components/Screen';
 import { StateView } from '@/src/shared/components/StateView';
 import { colors, radii, spacing, typography } from '@/src/shared/theme/theme';
 
 export default function CheckoutScreen() {
+  if (!isCheckoutSheetAvailable()) {
+    return (
+      <Screen>
+        <StateView
+          title="Development build required"
+          message="Shopify Checkout Sheet Kit is a native module and is not available in Expo Go. Run a development build, then start Expo with --dev-client."
+        />
+      </Screen>
+    );
+  }
+
+  return <CheckoutSheetScreen />;
+}
+
+function CheckoutSheetScreen() {
   const router = useRouter();
   const checkoutSheet = useShopifyCheckoutSheet();
   const cartId = useCartStore((state) => state.cartId);
