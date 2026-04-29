@@ -5,9 +5,9 @@
 This repository is intended to contain a React Native app in `/app` and the backend in
 `/server`. This starter implements only the backend.
 
-The backend is a Fastify, Node.js, and TypeScript service that talks to the Shopify
-Storefront API. The mobile app should call this backend instead of calling Shopify directly.
-Storefront access tokens stay on the server and are never returned by API responses.
+The backend is a Fastify, Node.js, and TypeScript service that talks to Shopify Admin GraphQL
+through `@shopify/shopify-api`. The mobile app should call this backend instead of calling Shopify
+directly. Admin access tokens stay on the server and are never returned by API responses.
 
 ### Project Structure
 
@@ -18,7 +18,7 @@ Storefront access tokens stay on the server and are never returned by API respon
     /modules/shopify
       /application                  Use-cases and repository contracts
       /domain                       App-facing DTOs
-      /infra                        Shopify Storefront GraphQL client/repository
+      /infra                        Shopify Admin GraphQL client/repository
       /presentation                 Fastify routes and request/response schemas
     /shared
       /errors                       Application error types
@@ -53,10 +53,13 @@ BODY_LIMIT_BYTES=1048576
 RATE_LIMIT_REDIS_URL=
 
 SHOPIFY_STORE_DOMAIN=your-shop.myshopify.com
-SHOPIFY_STOREFRONT_ACCESS_TOKEN=your_storefront_access_token
-SHOPIFY_STOREFRONT_API_VERSION=2025-01
-SHOPIFY_STOREFRONT_TIMEOUT_MS=5000
-SHOPIFY_STOREFRONT_READ_RETRIES=2
+SHOPIFY_CLIENT_ID=your_custom_app_client_id
+SHOPIFY_CLIENT_SECRET=your_custom_app_client_secret
+SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_your_admin_access_token
+SHOPIFY_API_VERSION=2026-04
+SHOPIFY_APP_HOST_NAME=localhost
+SHOPIFY_ADMIN_TIMEOUT_MS=5000
+SHOPIFY_ADMIN_READ_RETRIES=2
 SHOPIFY_CIRCUIT_FAILURE_THRESHOLD=5
 SHOPIFY_CIRCUIT_OPEN_MS=30000
 PRODUCT_CACHE_TTL_MS=30000
@@ -66,9 +69,6 @@ PRODUCT_LIST_VARIANT_LIMIT=20
 PRODUCT_DETAIL_IMAGE_LIMIT=10
 PRODUCT_DETAIL_VARIANT_LIMIT=100
 ```
-
-`SHOPIFY_STORE_DOMAIN` should be the store domain without `https://`. The token must be a
-Storefront API access token, not an Admin API token.
 
 Production startup rejects `CORS_ORIGIN=*`. Use a comma-separated allowlist such as
 `https://shop.example,https://admin.example`. Swagger UI is disabled by default in production; set
@@ -80,14 +80,14 @@ creation. Local development and single-instance deployments use the plugin's in-
 requests return a stable `RATE_LIMITED` error envelope and `Retry-After` headers, and are logged with
 the `rate_limit.limited_request` metric key.
 
-Shopify Storefront requests are aborted after `SHOPIFY_STOREFRONT_TIMEOUT_MS`. Product and cart read
-queries are retried with bounded exponential backoff up to `SHOPIFY_STOREFRONT_READ_RETRIES`; cart
+Shopify Admin requests are aborted after `SHOPIFY_ADMIN_TIMEOUT_MS`. Product and cart read
+queries are retried with bounded exponential backoff up to `SHOPIFY_ADMIN_READ_RETRIES`; cart
 mutations are not retried automatically.
 
-The Storefront client opens an in-process circuit breaker after repeated upstream failures. While the
+The Admin client opens an in-process circuit breaker after repeated upstream failures. While the
 breaker is open, catalog routes can serve stale cached product list/detail responses within
 `PRODUCT_CACHE_STALE_MS`; cart mutations fail fast with `SHOPIFY_UNAVAILABLE`. Health responses
-include `shopifyCircuitBreaker` and `catalogCache` counters for operational visibility. Catalog list
+include `shopifyAdminCircuitBreaker` and `catalogCache` counters for operational visibility. Catalog list
 queries intentionally use lighter image and variant limits than detail queries; tune the
 `PRODUCT_*_LIMIT` variables for your catalog size and payload budget.
 
@@ -131,13 +131,20 @@ The health response includes circuit breaker state and catalog cache hit counter
 
 ### How Shopify Integration Works
 
-The backend uses Shopify Storefront API GraphQL operations through a dedicated client wrapper
+The backend uses Shopify Admin API GraphQL operations through a dedicated `@shopify/shopify-api`
+client wrapper
 in `src/modules/shopify/infra`. Route handlers never construct GraphQL queries directly.
 
-Implemented Storefront operations:
+Implemented Admin catalog operations:
 
 - `products`
 - `productByHandle`
+
+Legacy cart route code still exists, but Shopify cart mutations are Storefront API operations and
+need a separate Storefront token/client before production use.
+
+Existing legacy cart GraphQL operations:
+
 - `cartCreate`
 - `cart`
 - `cartLinesAdd`
@@ -147,7 +154,7 @@ Implemented Storefront operations:
 Shopify GraphQL edges and nodes are normalized into app-friendly DTOs. Public responses expose
 backend-owned IDs such as `productId`, `variantId`, `cartId`, and `cartLineId`; raw
 `gid://shopify/...` values stay behind the backend boundary. Product lists expose opaque
-`pageInfo.nextPageToken` and `pageInfo.previousPageToken` values rather than Storefront cursors.
+`pageInfo.nextPageToken` and `pageInfo.previousPageToken` values rather than Shopify cursors.
 Pagination tokens are versioned backend tokens; they do not have a fixed server-side expiry today,
 but clients should treat them as short-lived and compatible only with the current catalog query.
 For compatibility during migration, the backend still accepts legacy Shopify GIDs and legacy
@@ -301,7 +308,7 @@ Frontend flow:
 5. Shopify checkout opens with Shopify Checkout Sheet Kit.
 6. Completion is detected through Checkout Sheet lifecycle events in the POC; production should
    reconcile orders through customer auth or webhooks.
-7. Orders uses demo backend order endpoints because Shopify Storefront API cannot fetch anonymous
+7. Orders uses demo backend order endpoints because Shopify APIs cannot fetch anonymous
    customer order history.
 8. Purchase again requests backend rebuy lines and attempts to sync them into the Shopify cart.
 

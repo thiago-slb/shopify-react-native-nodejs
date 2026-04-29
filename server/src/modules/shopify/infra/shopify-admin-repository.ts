@@ -16,7 +16,7 @@ import type {
   ProductListParams,
   ProductVariant
 } from '../domain/product.js';
-import type { ShopifyStorefrontClient } from './storefront-client.js';
+import type { ShopifyAdminClient } from './shopify-admin-client.js';
 import {
   cartCreateMutation,
   cartLinesAddMutation,
@@ -25,7 +25,7 @@ import {
   cartQuery,
   productByHandleQuery,
   productsQuery
-} from './storefront-queries.js';
+} from './shopify-admin-queries.js';
 
 type Edge<TNode> = {
   node: TNode;
@@ -49,6 +49,7 @@ type ShopifyVariant = {
   title: string;
   availableForSale: boolean;
   quantityAvailable: number | null;
+  priceAmount?: string;
   price: ShopifyMoney;
   selectedOptions: Array<{ name: string; value: string }>;
   image: ShopifyImage | null;
@@ -59,7 +60,6 @@ type ShopifyProduct = {
   title: string;
   handle: string;
   description: string;
-  availableForSale: boolean;
   images: Connection<ShopifyImage>;
   priceRange: {
     minVariantPrice: ShopifyMoney;
@@ -73,6 +73,10 @@ type ShopifyPageInfo = {
   hasPreviousPage: boolean;
   startCursor: string | null;
   endCursor: string | null;
+};
+
+type ShopifyShop = {
+  currencyCode: string;
 };
 
 type ShopifyCartLine = {
@@ -151,27 +155,29 @@ function normalizeImage(image: ShopifyImage): ProductImage {
   };
 }
 
-function normalizeVariant(variant: ShopifyVariant): ProductVariant {
+function normalizeVariant(variant: ShopifyVariant, currencyCode: string): ProductVariant {
   return {
     variantId: encodePublicId('variant', variant.id),
     title: variant.title,
     availableForSale: variant.availableForSale,
     quantityAvailable: variant.quantityAvailable,
-    price: variant.price,
+    price: variant.priceAmount
+      ? { amount: variant.priceAmount, currencyCode }
+      : variant.price,
     selectedOptions: variant.selectedOptions
   };
 }
 
-function normalizeProduct(product: ShopifyProduct): Product {
+function normalizeProduct(product: ShopifyProduct, currencyCode: string): Product {
   return {
     productId: encodePublicId('product', product.id),
     title: product.title,
     handle: product.handle,
     description: product.description,
-    availableForSale: product.availableForSale,
+    availableForSale: nodes(product.variants).some((variant) => variant.availableForSale),
     images: nodes(product.images).map(normalizeImage),
     priceRange: product.priceRange,
-    variants: nodes(product.variants).map(normalizeVariant)
+    variants: nodes(product.variants).map((variant) => normalizeVariant(variant, currencyCode))
   };
 }
 
@@ -275,7 +281,7 @@ function toShopifyLineUpdateInput(line: CartLineUpdateInput): {
   };
 }
 
-export class ShopifyStorefrontRepository implements ShopifyRepository {
+export class ShopifyAdminRepository implements ShopifyRepository {
   private readonly config: RepositoryConfig;
   private readonly productListCache = new Map<string, CatalogCacheEntry<ProductConnection>>();
   private readonly productDetailCache = new Map<string, CatalogCacheEntry<Product | null>>();
@@ -286,7 +292,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
   private lastDetailResponseBytes = 0;
 
   constructor(
-    private readonly client: ShopifyStorefrontClient,
+    private readonly client: ShopifyAdminClient,
     config: Partial<RepositoryConfig> = {}
   ) {
     this.config = { ...defaultRepositoryConfig, ...config };
@@ -310,6 +316,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
     try {
       const data = await this.client.request<
         {
+          shop: ShopifyShop;
           products: Connection<ShopifyProduct> & {
             pageInfo: ShopifyPageInfo;
           };
@@ -334,7 +341,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
       }, { retriable: true });
 
       const result = {
-        items: nodes(data.products).map(normalizeProduct),
+        items: nodes(data.products).map((product) => normalizeProduct(product, data.shop.currencyCode)),
         pageInfo: {
           hasNextPage: data.products.pageInfo.hasNextPage,
           hasPreviousPage: data.products.pageInfo.hasPreviousPage,
@@ -369,6 +376,7 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
     try {
       const data = await this.client.request<
         {
+          shop: ShopifyShop;
           productByHandle: ShopifyProduct | null;
         },
         { handle: string; imageLimit: number; variantLimit: number }
@@ -378,7 +386,9 @@ export class ShopifyStorefrontRepository implements ShopifyRepository {
         variantLimit: this.config.PRODUCT_DETAIL_VARIANT_LIMIT
       }, { retriable: true });
 
-      const result = data.productByHandle ? normalizeProduct(data.productByHandle) : null;
+      const result = data.productByHandle
+        ? normalizeProduct(data.productByHandle, data.shop.currencyCode)
+        : null;
       this.lastDetailResponseBytes = responseBytes(result);
       this.setCache(this.productDetailCache, cacheKey, result);
       return result;

@@ -39,7 +39,7 @@ describe('Shopify routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       status: 'ok',
-      shopifyCircuitBreaker: { state: 'closed', failures: 0 },
+      shopifyAdminCircuitBreaker: { state: 'closed', failures: 0 },
       catalogCache: { hits: 0, staleHits: 0, misses: 0 }
     });
   });

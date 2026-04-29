@@ -14,10 +14,8 @@ const variantFields = `
   id
   title
   availableForSale
-  quantityAvailable
-  price {
-    ${moneyFields}
-  }
+  quantityAvailable: inventoryQuantity
+  priceAmount: price
   selectedOptions {
     name
     value
@@ -32,7 +30,6 @@ const productFields = `
   title
   handle
   description
-  availableForSale
   images(first: $imageLimit) {
     edges {
       node {
@@ -40,7 +37,7 @@ const productFields = `
       }
     }
   }
-  priceRange {
+  priceRange: priceRangeV2 {
     minVariantPrice {
       ${moneyFields}
     }
@@ -106,6 +103,9 @@ const cartFields = `
 
 export const productsQuery = `
   query Products($first: Int, $last: Int, $after: String, $before: String, $query: String, $imageLimit: Int!, $variantLimit: Int!) {
+    shop {
+      currencyCode
+    }
     products(first: $first, last: $last, after: $after, before: $before, query: $query) {
       pageInfo {
         hasNextPage
@@ -124,6 +124,9 @@ export const productsQuery = `
 
 export const productByHandleQuery = `
   query ProductByHandle($handle: String!, $imageLimit: Int!, $variantLimit: Int!) {
+    shop {
+      currencyCode
+    }
     productByHandle(handle: $handle) {
       ${productFields}
     }

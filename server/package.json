@@ -20,6 +20,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.2",
+    "@shopify/shopify-api": "^13.0.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "ioredis": "^5.10.1",

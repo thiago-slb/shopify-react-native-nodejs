@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ShopifyStorefrontClient } from '../src/modules/shopify/infra/storefront-client.js';
+import { setAbstractFetchFunc } from '@shopify/shopify-api/runtime';
+import { ShopifyAdminClient } from '../src/modules/shopify/infra/shopify-admin-client.js';
 import { testConfig } from './test-helpers.js';
 
 function createResponse(body: unknown, status = 200): Response {
@@ -9,10 +10,32 @@ function createResponse(body: unknown, status = 200): Response {
   });
 }
 
-describe('ShopifyStorefrontClient', () => {
+function stubShopifyFetch(fetchMock: typeof fetch): void {
+  vi.stubGlobal('fetch', fetchMock);
+  setAbstractFetchFunc(fetchMock);
+}
+
+describe('ShopifyAdminClient', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    setAbstractFetchFunc(globalThis.fetch);
     vi.useRealTimers();
+  });
+
+  it('uses the Shopify Admin GraphQL endpoint and access token header', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(createResponse({ data: { ok: true } }));
+    stubShopifyFetch(fetchMock);
+
+    const client = new ShopifyAdminClient(testConfig);
+
+    await expect(client.request('query Test { ok }', {})).resolves.toEqual({ ok: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.myshopify.com/admin/api/2025-01/graphql.json');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': 'test-token'
+    });
   });
 
   it('retries retriable reads with bounded attempts', async () => {
@@ -20,11 +43,11 @@ describe('ShopifyStorefrontClient', () => {
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error('network down'))
       .mockResolvedValueOnce(createResponse({ data: { ok: true } }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubShopifyFetch(fetchMock);
 
-    const client = new ShopifyStorefrontClient({
+    const client = new ShopifyAdminClient({
       ...testConfig,
-      SHOPIFY_STOREFRONT_READ_RETRIES: 1
+      SHOPIFY_ADMIN_READ_RETRIES: 1
     });
 
     await expect(client.request('query Test { ok }', {}, { retriable: true })).resolves.toEqual({
@@ -35,11 +58,11 @@ describe('ShopifyStorefrontClient', () => {
 
   it('does not retry non-retriable cart mutations', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('network down'));
-    vi.stubGlobal('fetch', fetchMock);
+    stubShopifyFetch(fetchMock);
 
-    const client = new ShopifyStorefrontClient({
+    const client = new ShopifyAdminClient({
       ...testConfig,
-      SHOPIFY_STOREFRONT_READ_RETRIES: 2
+      SHOPIFY_ADMIN_READ_RETRIES: 2
     });
 
     await expect(client.request('mutation CartCreate { cartCreate }', {})).rejects.toMatchObject({
@@ -57,12 +80,12 @@ describe('ShopifyStorefrontClient', () => {
         });
       });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubShopifyFetch(fetchMock);
 
-    const client = new ShopifyStorefrontClient({
+    const client = new ShopifyAdminClient({
       ...testConfig,
-      SHOPIFY_STOREFRONT_TIMEOUT_MS: 1,
-      SHOPIFY_STOREFRONT_READ_RETRIES: 0
+      SHOPIFY_ADMIN_TIMEOUT_MS: 1,
+      SHOPIFY_ADMIN_READ_RETRIES: 0
     });
 
     await expect(client.request('query Test { ok }', {}, { retriable: true })).rejects.toMatchObject({
@@ -72,11 +95,11 @@ describe('ShopifyStorefrontClient', () => {
 
   it('opens the circuit after repeated upstream failures', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('network down'));
-    vi.stubGlobal('fetch', fetchMock);
+    stubShopifyFetch(fetchMock);
 
-    const client = new ShopifyStorefrontClient({
+    const client = new ShopifyAdminClient({
       ...testConfig,
-      SHOPIFY_STOREFRONT_READ_RETRIES: 0,
+      SHOPIFY_ADMIN_READ_RETRIES: 0,
       SHOPIFY_CIRCUIT_FAILURE_THRESHOLD: 1,
       SHOPIFY_CIRCUIT_OPEN_MS: 30_000
     });

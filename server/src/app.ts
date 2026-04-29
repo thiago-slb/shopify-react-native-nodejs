@@ -8,8 +8,8 @@ import type { AppConfig } from './config/env.js';
 import { loadConfig } from './config/env.js';
 import { DemoOrdersService } from './modules/shopify/application/demo-orders-service.js';
 import { ShopifyService } from './modules/shopify/application/shopify-service.js';
-import { ShopifyStorefrontRepository } from './modules/shopify/infra/shopify-storefront-repository.js';
-import { ShopifyStorefrontClient } from './modules/shopify/infra/storefront-client.js';
+import { ShopifyAdminRepository } from './modules/shopify/infra/shopify-admin-repository.js';
+import { ShopifyAdminClient } from './modules/shopify/infra/shopify-admin-client.js';
 import { registerShopifyRoutes } from './modules/shopify/presentation/shopify-routes.js';
 import { RateLimitedError } from './shared/errors/app-error.js';
 import { errorHandler } from './shared/http/error-handler.js';
@@ -56,9 +56,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     });
   }
 
-  const storefrontClient = new ShopifyStorefrontClient(config);
-  const storefrontRepository = new ShopifyStorefrontRepository(storefrontClient, config);
-  const shopifyService = options.shopifyService ?? new ShopifyService(storefrontRepository);
+  const adminClient = new ShopifyAdminClient(config);
+  const adminRepository = new ShopifyAdminRepository(adminClient, config);
+  const shopifyService = options.shopifyService ?? new ShopifyService(adminRepository);
   const demoOrdersService = new DemoOrdersService();
 
   fastify.setErrorHandler(errorHandler);
@@ -93,7 +93,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     openapi: {
       info: {
         title: 'Shopify React Native Backend',
-        description: 'Backend API for a React Native Shopify Storefront integration.',
+        description: 'Backend API for a React Native Shopify Admin API integration.',
         version: '0.1.0'
       }
     }
@@ -117,10 +117,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         response: {
           200: {
             type: 'object',
-            required: ['status'],
+            required: ['status', 'shopifyAdminCircuitBreaker', 'catalogCache'],
             properties: {
               status: { type: 'string' },
-              shopifyCircuitBreaker: {
+              shopifyAdminCircuitBreaker: {
                 type: 'object',
                 required: ['state', 'failures', 'openedUntil'],
                 properties: {
@@ -153,8 +153,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     () => ({
       status: 'ok',
-      shopifyCircuitBreaker: storefrontClient.getCircuitBreakerState(),
-      catalogCache: storefrontRepository.getCatalogCacheMetrics()
+      shopifyAdminCircuitBreaker: adminClient.getCircuitBreakerState(),
+      catalogCache: adminRepository.getCatalogCacheMetrics()
     })
   );
 

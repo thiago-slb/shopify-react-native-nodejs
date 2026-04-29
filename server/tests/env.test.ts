@@ -3,7 +3,9 @@ import { loadConfig } from '../src/config/env.js';
 
 const requiredEnv = {
   SHOPIFY_STORE_DOMAIN: 'example.myshopify.com',
-  SHOPIFY_STOREFRONT_ACCESS_TOKEN: 'test-token'
+  SHOPIFY_CLIENT_ID: 'test-client-id',
+  SHOPIFY_CLIENT_SECRET: 'test-client-secret',
+  SHOPIFY_ADMIN_ACCESS_TOKEN: 'test-token'
 };
 
 describe('environment config', () => {
@@ -27,4 +29,3 @@ describe('environment config', () => {
     ).toBe(false);
   });
 });
-

@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { encodePublicId } from '../src/modules/shopify/application/public-id.js';
-import { ShopifyStorefrontRepository } from '../src/modules/shopify/infra/shopify-storefront-repository.js';
+import { ShopifyAdminRepository } from '../src/modules/shopify/infra/shopify-admin-repository.js';
 import { UpstreamUnavailableError } from '../src/shared/errors/app-error.js';
-import type { ShopifyStorefrontClient } from '../src/modules/shopify/infra/storefront-client.js';
+import type { ShopifyAdminClient } from '../src/modules/shopify/infra/shopify-admin-client.js';
 
-function createClient(response: unknown): ShopifyStorefrontClient {
+function createClient(response: unknown): ShopifyAdminClient {
   return {
     request: vi.fn().mockResolvedValue(response)
-  } as unknown as ShopifyStorefrontClient;
+  } as unknown as ShopifyAdminClient;
 }
 
 const shopifyCart = {
@@ -82,9 +82,9 @@ const shopifyProduct = {
   }
 };
 
-describe('ShopifyStorefrontRepository', () => {
+describe('ShopifyAdminRepository', () => {
   it('normalizes cartCreate responses into app DTOs', async () => {
-    const repository = new ShopifyStorefrontRepository(
+    const repository = new ShopifyAdminRepository(
       createClient({
         cartCreate: {
           cart: shopifyCart,
@@ -106,8 +106,8 @@ describe('ShopifyStorefrontRepository', () => {
 
   it('rejects malformed public pagination tokens before calling Shopify', async () => {
     const request = vi.fn().mockResolvedValue({});
-    const client = { request } as unknown as ShopifyStorefrontClient;
-    const repository = new ShopifyStorefrontRepository(client);
+    const client = { request } as unknown as ShopifyAdminClient;
+    const repository = new ShopifyAdminRepository(client);
 
     await expect(repository.listProducts({ pageToken: 'not-a-token' })).rejects.toMatchObject({
       code: 'INVALID_PAGE_TOKEN'
@@ -117,6 +117,7 @@ describe('ShopifyStorefrontRepository', () => {
 
   it('caches product list responses by query shape and exposes cache metrics', async () => {
     const request = vi.fn().mockResolvedValue({
+      shop: { currencyCode: 'USD' },
       products: {
         pageInfo: {
           hasNextPage: false,
@@ -127,8 +128,8 @@ describe('ShopifyStorefrontRepository', () => {
         edges: [{ node: shopifyProduct }]
       }
     });
-    const client = { request } as unknown as ShopifyStorefrontClient;
-    const repository = new ShopifyStorefrontRepository(client, {
+    const client = { request } as unknown as ShopifyAdminClient;
+    const repository = new ShopifyAdminRepository(client, {
       PRODUCT_CACHE_TTL_MS: 60_000,
       PRODUCT_LIST_IMAGE_LIMIT: 2,
       PRODUCT_LIST_VARIANT_LIMIT: 3
@@ -150,6 +151,7 @@ describe('ShopifyStorefrontRepository', () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce({
+        shop: { currencyCode: 'USD' },
         products: {
           pageInfo: {
             hasNextPage: false,
@@ -161,8 +163,8 @@ describe('ShopifyStorefrontRepository', () => {
         }
       })
       .mockRejectedValueOnce(new UpstreamUnavailableError('Circuit open'));
-    const client = { request } as unknown as ShopifyStorefrontClient;
-    const repository = new ShopifyStorefrontRepository(client, {
+    const client = { request } as unknown as ShopifyAdminClient;
+    const repository = new ShopifyAdminRepository(client, {
       PRODUCT_CACHE_TTL_MS: 1,
       PRODUCT_CACHE_STALE_MS: 60_000
     });
@@ -184,7 +186,7 @@ describe('ShopifyStorefrontRepository', () => {
     ['CART_EXPIRED', { field: ['cartId'], message: 'Cart is expired' }],
     ['CART_LINE_UNAVAILABLE', { field: ['lines', '0', 'id'], message: 'Line was not found' }]
   ])('maps Shopify userErrors to %s', async (code, userError) => {
-    const repository = new ShopifyStorefrontRepository(
+    const repository = new ShopifyAdminRepository(
       createClient({
         cartLinesAdd: {
           cart: null,

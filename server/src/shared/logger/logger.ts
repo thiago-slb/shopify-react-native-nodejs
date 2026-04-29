@@ -4,7 +4,10 @@ export function loggerOptions(config: Pick<AppConfig, 'LOG_LEVEL' | 'NODE_ENV'>)
   return {
     level: config.LOG_LEVEL,
     redact: {
-      paths: ['req.headers.authorization', 'req.headers["x-shopify-storefront-access-token"]'],
+      paths: [
+        'req.headers.authorization',
+        'req.headers["x-shopify-access-token"]'
+      ],
       remove: true
     },
     transport:
